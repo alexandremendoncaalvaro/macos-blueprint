@@ -631,8 +631,10 @@ sudo_local_pam_tid_enabled() {
 
 read_ignoreard_state() {
   local raw
+  local raw_upper
   raw="$(defaults read /Library/Preferences/com.apple.security.authorization.plist ignoreArd 2>/dev/null || true)"
-  case "${raw^^}" in
+  raw_upper="$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]')"
+  case "$raw_upper" in
     1|TRUE|YES) echo "TRUE" ;;
     0|FALSE|NO) echo "FALSE" ;;
     *) echo "absent" ;;
