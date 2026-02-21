@@ -1,51 +1,47 @@
 # macos-blueprint
 
-Declarative macOS development environment. Checks the state of every component before acting — safe to run on a fresh machine or an existing one.
+Bootstrap script for a macOS development machine.
 
-## Philosophy
+It is safe to re-run: `bootstrap.sh` checks current state first, then fixes only what is missing.
 
-```
-Host        → stable, minimal
-Toolchains  → managed by mise
-Dependencies → per-project
-Services    → containers (OrbStack)
-```
+## What this is
 
-No global dependency pollution. No manual steps. No guessing what's installed.
+A single script (`bootstrap.sh`) plus declarative config files (`Brewfile`, dotfiles, mise config) to bring a machine to a predictable development setup.
+
+## What it sets up
+
+- Xcode Command Line Tools.
+- Homebrew and packages from `Brewfile`.
+- Dotfile symlinks from this repo to `$HOME`.
+- Git identity model (`~/.gitconfig` + `~/.gitconfig.local`).
+- Toolchains with `mise`.
+- Shell integration (`mise`, `starship`, `fzf`).
+- macOS developer defaults (keyboard, dock, Finder, screenshots, input).
+- `sudo` Touch ID integration (`pam_tid`) when available.
+
+## What it does not do
+
+- Does not configure Apple Watch integration for `sudo`.
+- Does not change sudo timeout policy (`timestamp_timeout`, `tty_tickets`, etc.).
+- Does not create/remove `NOPASSWD` sudo overrides.
 
 ## Usage
 
-**Fresh machine** — clone and run:
+**Fresh machine**
 ```bash
 git clone https://github.com/alexandremendoncaalvaro/macos-blueprint ~/dotfiles
 cd ~/dotfiles && ./bootstrap.sh
 ```
 
-**Existing machine** — diagnose without changing anything:
+**Existing machine (diagnose only)**
 ```bash
 ./bootstrap.sh --check
 ```
 
-**Apply fixes:**
+**Apply fixes**
 ```bash
 ./bootstrap.sh
 ```
-
-## What it does
-
-The script checks each component in order, reports its state, and fixes only what needs fixing.
-
-| Step | Checks |
-|------|--------|
-| Xcode CLI Tools | installed, required by Homebrew and git |
-| Homebrew | installed, correct architecture prefix |
-| Brew bundle | all packages from `Brewfile` satisfied |
-| Dotfiles | each file symlinked, pointing to correct source |
-| Git Identity | `~/.gitconfig.local` exists, has `user.name`/`user.email`, and is included by `~/.gitconfig` |
-| mise | installed, shims on PATH, doctor clean, all tools present |
-| Shell | `.zshrc` has `mise activate` + `starship init` + `fzf`, `.zshenv` correct |
-| macOS defaults | keyboard, dock, Finder, input, screenshot, DS_Store preferences |
-| sudo authentication | PAM local auth configured when available (`pam_tid`) |
 
 ## Detailed Reference
 
