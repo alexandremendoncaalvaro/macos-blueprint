@@ -10,6 +10,15 @@ brew "uv"                       # python env & package manager
 brew "starship"                 # shell prompt
 brew "swiftlint"                # swift linter
 
+# Modern CLI essentials
+brew "fzf"                      # fuzzy finder — ctrl+r history, ctrl+t file search
+brew "ripgrep"                  # faster grep (rg)
+brew "bat"                      # better cat — syntax highlighting, line numbers
+brew "eza"                      # better ls — colors, git status, icons
+
+# Fonts
+cask "font-meslo-lg-nerd-font"  # required for starship icons
+
 # Applications
 cask "orbstack"                 # docker runtime + linux VMs
 cask "visual-studio-code"
