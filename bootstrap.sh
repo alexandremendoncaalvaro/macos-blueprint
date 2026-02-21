@@ -645,16 +645,16 @@ step_macos_defaults() {
     $dock_changed   && { info "Restarting Dock...";   killall Dock   2>/dev/null || true; }
     $finder_changed && { info "Restarting Finder..."; killall Finder 2>/dev/null || true; }
   fi
+
+  # Keep this step idempotent under `set -e`: no-op runs must still succeed.
+  return 0
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 9. sudo authentication (Touch ID / Apple Watch + credential cache)
+# 9. sudo authentication (Touch ID for sudo)
 #
 # Rollback:
 #   - Remove /etc/pam.d/sudo_local to revert PAM behavior.
-#   - sudo defaults delete /Library/Preferences/com.apple.security.authorization.plist ignoreArd
-#     to revert Apple Watch approval helper behavior.
-#   - Remove /etc/sudoers.d/99-timestamp-timeout to revert sudo timeout.
 # ─────────────────────────────────────────────────────────────────────────────
 pam_tid_module_present() {
   [[ -e "/usr/lib/pam/pam_tid.so" ]] && return 0
@@ -667,56 +667,21 @@ sudo_local_pam_tid_enabled() {
   grep -Eq '^[[:space:]]*auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so([[:space:]]|$)' "$pam_file" 2>/dev/null
 }
 
-read_ignoreard_state() {
-  local raw
-  local raw_upper
-  raw="$(defaults read /Library/Preferences/com.apple.security.authorization.plist ignoreArd 2>/dev/null || true)"
-  raw_upper="$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]')"
-  case "$raw_upper" in
-    1|TRUE|YES) echo "TRUE" ;;
-    0|FALSE|NO) echo "FALSE" ;;
-    *) echo "absent" ;;
-  esac
-}
-
-read_timestamp_timeout_value() {
-  local timeout_file="/etc/sudoers.d/99-timestamp-timeout"
-  [[ -f "$timeout_file" ]] || { echo "missing"; return; }
-
-  local line value
-  line="$(awk '/^[[:space:]]*Defaults[[:space:]]+.*timestamp_timeout[[:space:]]*=/{print; exit}' "$timeout_file" 2>/dev/null || true)"
-
-  if [[ -z "$line" ]]; then
-    line="$(sudo -n awk '/^[[:space:]]*Defaults[[:space:]]+.*timestamp_timeout[[:space:]]*=/{print; exit}' "$timeout_file" 2>/dev/null || true)"
-  fi
-
-  [[ -z "$line" ]] && { echo "missing"; return; }
-
-  value="$(printf '%s\n' "$line" | sed -E 's/.*timestamp_timeout[[:space:]]*=[[:space:]]*([^[:space:],#]+).*/\1/')"
-  [[ -n "$value" ]] && echo "$value" || echo "missing"
-}
-
 step_touchid_sudo() {
   section "sudo authentication"
 
   local pam_file="/etc/pam.d/sudo_local"
   local pam_template="/etc/pam.d/sudo_local.template"
   local pam_line="auth       sufficient     pam_tid.so"
-  local timeout_file="/etc/sudoers.d/99-timestamp-timeout"
-  local timeout_line="Defaults timestamp_timeout=15"
-  local disable_watch="${DISABLE_WATCH_APPROVE:-0}"
+  local -a sudo_cmd=(sudo -n)
 
   local pam_present="no"
   local sudo_local_exists="no"
   local sudo_local_enabled="no"
-  local ignoreard_state
-  local timestamp_timeout_value
 
   pam_tid_module_present && pam_present="yes"
   [[ -f "$pam_file" ]] && sudo_local_exists="yes"
   sudo_local_pam_tid_enabled && sudo_local_enabled="yes"
-  ignoreard_state="$(read_ignoreard_state)"
-  timestamp_timeout_value="$(read_timestamp_timeout_value)"
 
   info "pam_tid module present? $pam_present"
   if [[ "$pam_present" == "no" ]]; then
@@ -728,16 +693,6 @@ step_touchid_sudo() {
   else
     info "sudo_local pam_tid line enabled? $sudo_local_enabled"
   fi
-  if [[ "$disable_watch" == "1" ]]; then
-    info "ignoreArd set? $ignoreard_state (skipped due DISABLE_WATCH_APPROVE=1)"
-  else
-    info "ignoreArd set? $ignoreard_state"
-  fi
-  if [[ "$timestamp_timeout_value" == "missing" ]]; then
-    info "timestamp_timeout configured? missing"
-  else
-    info "timestamp_timeout configured? $timestamp_timeout_value"
-  fi
 
   if $CHECK_ONLY; then return; fi
 
@@ -745,22 +700,25 @@ step_touchid_sudo() {
   if [[ "$pam_present" == "yes" && ( "$sudo_local_exists" == "no" || "$sudo_local_enabled" == "no" ) ]]; then
     needs_sudo=true
   fi
-  if [[ "$disable_watch" != "1" && "$ignoreard_state" != "TRUE" ]]; then
-    needs_sudo=true
-  fi
-  if [[ "$timestamp_timeout_value" != "15" ]]; then
-    needs_sudo=true
-  fi
 
   if $needs_sudo && ! sudo -n true 2>/dev/null; then
-    record_error "Sudo auth not cached; run 'sudo -v' once, then re-run bootstrap (no prompts are used here)"
-    return
+    if [[ -t 0 && -t 1 ]]; then
+      info "Admin authentication required to configure Touch ID for sudo"
+      if ! sudo -v; then
+        record_error "Failed to acquire sudo credentials; cannot configure sudo authentication"
+        return
+      fi
+      sudo_cmd=(sudo)
+    else
+      record_error "Sudo auth not cached; run 'sudo -v' once, then re-run bootstrap"
+      return
+    fi
   fi
 
   if [[ "$pam_present" == "yes" ]]; then
     if [[ ! -f "$pam_file" ]]; then
       if [[ -f "$pam_template" ]]; then
-        sudo -n cp "$pam_template" "$pam_file"
+        "${sudo_cmd[@]}" cp "$pam_template" "$pam_file"
         record_applied "$pam_file created from template"
       else
         record_error "Missing $pam_template; cannot safely create $pam_file"
@@ -768,11 +726,18 @@ step_touchid_sudo() {
     fi
 
     if [[ -f "$pam_file" ]]; then
+      # Already configured: nothing to rewrite.
+      if [[ "$sudo_local_enabled" == "yes" ]]; then
+        ok "$pam_file already configured"
+        return
+      fi
+
       local pam_before pam_after
       pam_before="$(mktemp)"
       pam_after="$(mktemp)"
 
-      if sudo -n cat "$pam_file" > "$pam_before"; then
+      # Read without sudo when possible; only escalate if needed.
+      if cat "$pam_file" > "$pam_before" 2>/dev/null || "${sudo_cmd[@]}" cat "$pam_file" > "$pam_before"; then
         awk -v canonical="$pam_line" '
           BEGIN { found = 0 }
           /^[[:space:]]*#?[[:space:]]*auth[[:space:]]+.*pam_tid\.so([[:space:]].*)?$/ {
@@ -789,7 +754,7 @@ step_touchid_sudo() {
         ' "$pam_before" > "$pam_after"
 
         if ! cmp -s "$pam_before" "$pam_after"; then
-          sudo -n install -m 0644 "$pam_after" "$pam_file"
+          "${sudo_cmd[@]}" install -m 0644 "$pam_after" "$pam_file"
           record_applied "$pam_file updated (pam_tid configured)"
         else
           ok "$pam_file already configured"
@@ -802,33 +767,6 @@ step_touchid_sudo() {
     fi
   else
     info "pam_tid not present; skipping sudo_local changes"
-  fi
-
-  if [[ "$disable_watch" == "1" ]]; then
-    info "Skipping Apple Watch helper (DISABLE_WATCH_APPROVE=1)"
-  elif [[ "$ignoreard_state" == "TRUE" ]]; then
-    ok "Apple Watch helper already enabled (ignoreArd=TRUE)"
-  else
-    sudo -n defaults write /Library/Preferences/com.apple.security.authorization.plist ignoreArd -bool TRUE
-    record_applied "Apple Watch helper enabled (ignoreArd=TRUE)"
-  fi
-
-  if [[ "$timestamp_timeout_value" == "15" ]]; then
-    ok "sudo timestamp_timeout already 15"
-  else
-    local timeout_tmp
-    timeout_tmp="$(mktemp)"
-    printf '%s\n' "$timeout_line" > "$timeout_tmp"
-    sudo -n install -m 0440 "$timeout_tmp" "$timeout_file"
-
-    if sudo -n visudo -cf "$timeout_file" >/dev/null 2>&1; then
-      record_applied "sudo timestamp_timeout configured to 15"
-    else
-      sudo -n rm -f "$timeout_file"
-      record_error "Invalid sudoers fragment; removed $timeout_file"
-    fi
-
-    rm -f "$timeout_tmp"
   fi
 }
 

@@ -45,7 +45,7 @@ The script checks each component in order, reports its state, and fixes only wha
 | mise | installed, shims on PATH, doctor clean, all tools present |
 | Shell | `.zshrc` has `mise activate` + `starship init` + `fzf`, `.zshenv` correct |
 | macOS defaults | keyboard, dock, Finder, input, screenshot, DS_Store preferences |
-| sudo authentication | PAM local auth configured when available, Apple Watch approval helper, and `timestamp_timeout=15` |
+| sudo authentication | PAM local auth configured when available (`pam_tid`) |
 
 ## Detailed Reference
 
@@ -152,18 +152,13 @@ The script enforces the following defaults:
 
 ### 9) sudo authentication
 
-Bootstrap configures three layers:
+Bootstrap configures this behavior:
 
 - `pam_tid` integration in `/etc/pam.d/sudo_local` (when module exists) for biometric approval.
-- Apple Watch approval helper (`ignoreArd=TRUE`) by default.
-- Opt-out for Apple Watch helper: `DISABLE_WATCH_APPROVE=1`.
-- Sudo timestamp caching via `/etc/sudoers.d/99-timestamp-timeout`.
-- Timestamp policy value: `Defaults timestamp_timeout=15`.
-- Timestamp file is validated with `visudo -cf` before being kept.
+- If admin credentials are not cached, bootstrap requests `sudo -v` interactively in a TTY.
+- In non-interactive runs, pre-cache credentials with `sudo -v` before running bootstrap.
 
 Status is always reported in `--check` mode for PAM module presence and `sudo_local` state.
-Status is always reported in `--check` mode for Apple Watch helper state.
-Status is always reported in `--check` mode for `timestamp_timeout` state.
 
 Output example:
 ```
@@ -193,8 +188,8 @@ Output example:
 
 ── sudo authentication
   ·  pam_tid module present? yes
-  ·  ignoreArd set? TRUE
-  ·  timestamp_timeout configured? 15
+  ·  sudo_local exists? yes
+  ·  sudo_local pam_tid line enabled? yes (configured)
 ```
 
 ## Structure
