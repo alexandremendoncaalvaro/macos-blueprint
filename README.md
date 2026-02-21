@@ -41,10 +41,11 @@ The script checks each component in order, reports its state, and fixes only wha
 | Homebrew | installed, correct architecture prefix |
 | Brew bundle | all packages from `Brewfile` satisfied |
 | Dotfiles | each file symlinked, pointing to correct source |
+| Git Identity | `~/.gitconfig.local` exists, has `user.name`/`user.email`, and is included by `~/.gitconfig` |
 | mise | installed, shims on PATH, doctor clean, all tools present |
 | Shell | `.zshrc` has `mise activate` + `starship init` + `fzf`, `.zshenv` correct |
 | macOS defaults | keyboard, dock, Finder, input, screenshot, DS_Store preferences |
-| TouchID for sudo | `/etc/pam.d/sudo_local` configured for fingerprint auth |
+| sudo authentication | PAM local auth configured when available, Apple Watch approval helper, and `timestamp_timeout=15` |
 
 Output example:
 ```
@@ -61,14 +62,21 @@ Output example:
   ✓  ~/.config/mise/config.toml
   ✓  ~/.config/starship.toml
 
+── Git Identity
+  ·  ~/.gitconfig includes ~/.gitconfig.local? yes
+  ·  ~/.gitconfig.local has user.name? yes
+  ·  ~/.gitconfig.local has user.email? yes
+
 ── mise
   ✓  mise 2026.x macos-arm64
   ✓  Shims on PATH
   ✓  mise doctor: clean
   ✓  All configured tools installed
 
-── TouchID for sudo
-  ✓  Enabled (/etc/pam.d/sudo_local)
+── sudo authentication
+  ·  pam_tid module present? yes
+  ·  ignoreArd set? TRUE
+  ·  timestamp_timeout configured? 15
 ```
 
 ## Structure
@@ -78,7 +86,7 @@ dotfiles/
 ├── bootstrap.sh             # check+apply provisioner
 ├── Brewfile                 # packages, casks, VS Code extensions
 ├── .zshenv                  # PATH dedup + mise shims (all shell contexts)
-├── .gitconfig               # global git identity, aliases, defaults
+├── .gitconfig               # shared git defaults + includes ~/.gitconfig.local
 ├── .gitignore_global        # global ignore: .DS_Store, secrets, build artifacts
 └── .config/
     ├── mise/
@@ -86,13 +94,14 @@ dotfiles/
     └── starship.toml        # prompt
 ```
 
-> **Note:** `.gitconfig` contains placeholder `name` and `email` values. Update them after cloning:
+> **Note:** personal Git identity is stored in `~/.gitconfig.local` (non-versioned, machine-local).
+> `bootstrap.sh` ensures `~/.gitconfig` includes it and keeps `user.name`/`user.email` out of repo-managed config.
 > ```bash
-> git config --global user.name "Your Name"
-> git config --global user.email "you@example.com"
+> git config --file ~/.gitconfig.local user.name "Your Name"
+> git config --file ~/.gitconfig.local user.email "you@example.com"
 > ```
 
-All config files are symlinked from this repo into `$HOME`. Edit here, changes take effect immediately.
+Repo-managed config files are symlinked from this repo into `$HOME`. Machine-local files (for example `~/.gitconfig.local`) stay outside the repo.
 
 ## Toolchain
 
