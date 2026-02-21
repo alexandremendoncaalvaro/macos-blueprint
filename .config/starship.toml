@@ -1,0 +1,25 @@
+# Configuração Padrão do Starship (Minimalista e Moderna)
+add_newline = false
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[➜](bold red)"
+
+[package]
+disabled = true
+
+[nodejs]
+symbol = "⬢ "
+style = "bold green"
+
+[python]
+symbol = "🐍 "
+style = "bold yellow"
+
+[git_branch]
+symbol = "🌱 "
+style = "bold purple"
+
+[git_status]
+style = "bold red"
+
