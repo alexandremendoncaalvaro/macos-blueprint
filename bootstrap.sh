@@ -195,7 +195,222 @@ step_dotfiles() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. mise — toolchain manager
+# 5. Git identity (local, untracked)
+# Keeps identity out of repo-managed ~/.gitconfig by using ~/.gitconfig.local.
+# ─────────────────────────────────────────────────────────────────────────────
+git_config_file_has_key() {
+  local file="$1"
+  local key="$2"
+  git config --file "$file" --get "$key" >/dev/null 2>&1
+}
+
+git_config_file_includes_local() {
+  local file="$1"
+  [[ -e "$file" || -L "$file" ]] || return 1
+
+  local include_path
+  while IFS= read -r include_path; do
+    case "$include_path" in
+      "~/.gitconfig.local"|"$HOME/.gitconfig.local") return 0 ;;
+    esac
+  done < <(git config --file "$file" --get-all include.path 2>/dev/null || true)
+
+  return 1
+}
+
+git_repo_managed_config_path() {
+  local global_cfg="$HOME/.gitconfig"
+
+  if [[ -L "$global_cfg" ]]; then
+    local link_target
+    link_target="$(readlink "$global_cfg")"
+    if [[ "$link_target" == /* ]]; then
+      echo "$link_target"
+    else
+      echo "$(cd "$(dirname "$global_cfg")" && pwd)/$link_target"
+    fi
+    return
+  fi
+
+  echo "$DOTFILES/.gitconfig"
+}
+
+git_repo_config_has_identity_entries() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  git_config_file_has_key "$file" user.name && return 0
+  git_config_file_has_key "$file" user.email && return 0
+  return 1
+}
+
+resolve_git_identity_seed_values() {
+  local __name_var="$1"
+  local __email_var="$2"
+  local seed_name=""
+  local seed_email=""
+  local global_name
+  local global_email
+
+  global_name="$(git config --global --get user.name 2>/dev/null || true)"
+  global_email="$(git config --global --get user.email 2>/dev/null || true)"
+
+  if [[ -n "$global_name" && -n "$global_email" ]]; then
+    seed_name="$global_name"
+    seed_email="$global_email"
+  else
+    [[ -n "$global_name" ]] && seed_name="$global_name"
+    [[ -n "$global_email" ]] && seed_email="$global_email"
+
+    if [[ -z "$seed_email" ]]; then
+      seed_email="$(git config --get user.email 2>/dev/null || true)"
+    fi
+
+    if [[ -z "$seed_name" ]]; then
+      local dscl_name
+      dscl_name="$(dscl . -read "/Users/$USER" RealName 2>/dev/null | sed -n 's/^RealName:[[:space:]]*//p' | head -1)"
+      if [[ -n "$dscl_name" ]]; then
+        seed_name="$dscl_name"
+      elif id -F >/dev/null 2>&1; then
+        seed_name="$(id -F 2>/dev/null || true)"
+      fi
+    fi
+  fi
+
+  printf -v "$__name_var" '%s' "$seed_name"
+  printf -v "$__email_var" '%s' "$seed_email"
+}
+
+append_missing_identity_placeholders() {
+  local file="$1"
+  local need_name="$2"
+  local need_email="$3"
+  local add_name="no"
+  local add_email="no"
+
+  if [[ "$need_name" == "yes" ]] && ! grep -Eq '^[[:space:]]*#[[:space:]]*name[[:space:]]*=' "$file" 2>/dev/null; then
+    add_name="yes"
+  fi
+  if [[ "$need_email" == "yes" ]] && ! grep -Eq '^[[:space:]]*#[[:space:]]*email[[:space:]]*=' "$file" 2>/dev/null; then
+    add_email="yes"
+  fi
+
+  if [[ "$add_name" == "no" && "$add_email" == "no" ]]; then
+    return 1
+  fi
+
+  {
+    printf '\n[user]\n'
+    [[ "$add_name" == "yes" ]] && printf '\t# name =\n'
+    [[ "$add_email" == "yes" ]] && printf '\t# email =\n'
+  } >> "$file"
+
+  return 0
+}
+
+step_git_identity() {
+  section "Git Identity"
+
+  local global_cfg="$HOME/.gitconfig"
+  local local_cfg="$HOME/.gitconfig.local"
+  local repo_cfg
+  repo_cfg="$(git_repo_managed_config_path)"
+
+  local is_symlink="no"
+  local includes_local="no"
+  local local_exists="no"
+  local local_has_name="no"
+  local local_has_email="no"
+  local repo_has_identity="no"
+
+  [[ -L "$global_cfg" ]] && is_symlink="yes"
+  git_config_file_includes_local "$global_cfg" && includes_local="yes"
+  [[ -f "$local_cfg" ]] && local_exists="yes"
+
+  if [[ "$local_exists" == "yes" ]]; then
+    git_config_file_has_key "$local_cfg" user.name && local_has_name="yes"
+    git_config_file_has_key "$local_cfg" user.email && local_has_email="yes"
+  fi
+
+  git_repo_config_has_identity_entries "$repo_cfg" && repo_has_identity="yes"
+
+  info "~/.gitconfig is symlink? $is_symlink"
+  info "~/.gitconfig includes ~/.gitconfig.local? $includes_local"
+  info "~/.gitconfig.local exists? $local_exists"
+  info "~/.gitconfig.local has user.name? $local_has_name"
+  info "~/.gitconfig.local has user.email? $local_has_email"
+  info "repo-managed config has user.name/email? $repo_has_identity"
+
+  if $CHECK_ONLY; then return; fi
+
+  local seed_name
+  local seed_email
+  resolve_git_identity_seed_values seed_name seed_email
+
+  if [[ ! -f "$local_cfg" ]]; then
+    : > "$local_cfg"
+    chmod 0600 "$local_cfg" 2>/dev/null || true
+    record_applied "~/.gitconfig.local created"
+  fi
+
+  if ! git_config_file_has_key "$local_cfg" user.name && [[ -n "$seed_name" ]]; then
+    git config --file "$local_cfg" user.name "$seed_name"
+    record_applied "~/.gitconfig.local: user.name set"
+  fi
+
+  if ! git_config_file_has_key "$local_cfg" user.email && [[ -n "$seed_email" ]]; then
+    git config --file "$local_cfg" user.email "$seed_email"
+    record_applied "~/.gitconfig.local: user.email set"
+  fi
+
+  local need_name_placeholder="no"
+  local need_email_placeholder="no"
+  git_config_file_has_key "$local_cfg" user.name || need_name_placeholder="yes"
+  git_config_file_has_key "$local_cfg" user.email || need_email_placeholder="yes"
+
+  if append_missing_identity_placeholders "$local_cfg" "$need_name_placeholder" "$need_email_placeholder"; then
+    record_applied "~/.gitconfig.local placeholders added for missing identity"
+  fi
+
+  if [[ ! -e "$global_cfg" && ! -L "$global_cfg" ]]; then
+    : > "$global_cfg"
+    record_applied "~/.gitconfig created"
+  fi
+
+  if git_config_file_includes_local "$global_cfg"; then
+    ok "~/.gitconfig already includes ~/.gitconfig.local"
+  else
+    git config --file "$global_cfg" --add include.path "~/.gitconfig.local"
+    record_applied "~/.gitconfig include added (~/.gitconfig.local)"
+  fi
+
+  repo_cfg="$(git_repo_managed_config_path)"
+  if [[ -f "$repo_cfg" ]]; then
+    local removed_any="no"
+
+    if git_config_file_has_key "$repo_cfg" user.name; then
+      git config --file "$repo_cfg" --unset-all user.name || true
+      removed_any="yes"
+    fi
+    if git_config_file_has_key "$repo_cfg" user.email; then
+      git config --file "$repo_cfg" --unset-all user.email || true
+      removed_any="yes"
+    fi
+
+    if [[ "$removed_any" == "yes" ]]; then
+      if ! grep -qF "# user.name and user.email must live in ~/.gitconfig.local" "$repo_cfg" 2>/dev/null; then
+        printf '\n# user.name and user.email must live in ~/.gitconfig.local\n' >> "$repo_cfg"
+      fi
+      record_applied "repo-managed gitconfig identity keys removed"
+    else
+      ok "repo-managed gitconfig has no user.name/user.email keys"
+    fi
+  else
+    record_warning "Repo-managed gitconfig not found at $repo_cfg"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. mise — toolchain manager
 # Checks installation, shims on PATH, and runs `mise install` if any
 # configured tool is missing. `mise install` is idempotent.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -257,7 +472,7 @@ step_mise() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. Shell configuration
+# 7. Shell configuration
 # Verifies .zshenv (PATH dedup + shims) and .zshrc (mise activate + starship).
 # Does not touch Kiro CLI or OrbStack managed blocks.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -323,7 +538,7 @@ step_shell() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. macOS system preferences
+# 8. macOS system preferences
 # Only preferences that meaningfully affect development workflow.
 # Each setting is checked before writing — no unnecessary writes.
 #
@@ -395,28 +610,186 @@ step_macos_defaults() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. TouchID for sudo
-# Writes /etc/pam.d/sudo_local (macOS 13+) so the fingerprint sensor
-# can authorize sudo instead of typing the password every time.
+# 9. sudo authentication (Touch ID / Apple Watch + credential cache)
+#
+# Rollback:
+#   - Remove /etc/pam.d/sudo_local to revert PAM behavior.
+#   - sudo defaults delete /Library/Preferences/com.apple.security.authorization.plist ignoreArd
+#     to revert Apple Watch approval helper behavior.
+#   - Remove /etc/sudoers.d/99-timestamp-timeout to revert sudo timeout.
 # ─────────────────────────────────────────────────────────────────────────────
-step_touchid_sudo() {
-  section "TouchID for sudo"
+pam_tid_module_present() {
+  [[ -e "/usr/lib/pam/pam_tid.so" ]] && return 0
+  compgen -G "/usr/lib/pam/pam_tid.so.*" > /dev/null
+}
 
+sudo_local_pam_tid_enabled() {
   local pam_file="/etc/pam.d/sudo_local"
-  local pam_line="auth       sufficient     pam_tid.so"
+  [[ -f "$pam_file" ]] || return 1
+  grep -Eq '^[[:space:]]*auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so([[:space:]]|$)' "$pam_file" 2>/dev/null
+}
 
-  if [[ -f "$pam_file" ]] && grep -q "pam_tid.so" "$pam_file" 2>/dev/null; then
-    ok "Enabled ($pam_file)"
-    return
+read_ignoreard_state() {
+  local raw
+  raw="$(defaults read /Library/Preferences/com.apple.security.authorization.plist ignoreArd 2>/dev/null || true)"
+  case "${raw^^}" in
+    1|TRUE|YES) echo "TRUE" ;;
+    0|FALSE|NO) echo "FALSE" ;;
+    *) echo "absent" ;;
+  esac
+}
+
+read_timestamp_timeout_value() {
+  local timeout_file="/etc/sudoers.d/99-timestamp-timeout"
+  [[ -f "$timeout_file" ]] || { echo "missing"; return; }
+
+  local line value
+  line="$(awk '/^[[:space:]]*Defaults[[:space:]]+.*timestamp_timeout[[:space:]]*=/{print; exit}' "$timeout_file" 2>/dev/null || true)"
+
+  if [[ -z "$line" ]]; then
+    line="$(sudo -n awk '/^[[:space:]]*Defaults[[:space:]]+.*timestamp_timeout[[:space:]]*=/{print; exit}' "$timeout_file" 2>/dev/null || true)"
   fi
 
-  record_warning "Not configured — password required for every sudo"
+  [[ -z "$line" ]] && { echo "missing"; return; }
+
+  value="$(printf '%s\n' "$line" | sed -E 's/.*timestamp_timeout[[:space:]]*=[[:space:]]*([^[:space:],#]+).*/\1/')"
+  [[ -n "$value" ]] && echo "$value" || echo "missing"
+}
+
+step_touchid_sudo() {
+  section "sudo authentication"
+
+  local pam_file="/etc/pam.d/sudo_local"
+  local pam_template="/etc/pam.d/sudo_local.template"
+  local pam_line="auth       sufficient     pam_tid.so"
+  local timeout_file="/etc/sudoers.d/99-timestamp-timeout"
+  local timeout_line="Defaults timestamp_timeout=15"
+  local disable_watch="${DISABLE_WATCH_APPROVE:-0}"
+
+  local pam_present="no"
+  local sudo_local_exists="no"
+  local sudo_local_enabled="no"
+  local ignoreard_state
+  local timestamp_timeout_value
+
+  pam_tid_module_present && pam_present="yes"
+  [[ -f "$pam_file" ]] && sudo_local_exists="yes"
+  sudo_local_pam_tid_enabled && sudo_local_enabled="yes"
+  ignoreard_state="$(read_ignoreard_state)"
+  timestamp_timeout_value="$(read_timestamp_timeout_value)"
+
+  info "pam_tid module present? $pam_present"
+  if [[ "$pam_present" == "no" ]]; then
+    info "pam_tid status: pam_tid not present"
+  fi
+  info "sudo_local exists? $sudo_local_exists"
+  if [[ "$pam_present" == "yes" && "$sudo_local_enabled" == "yes" ]]; then
+    info "sudo_local pam_tid line enabled? yes (configured)"
+  else
+    info "sudo_local pam_tid line enabled? $sudo_local_enabled"
+  fi
+  if [[ "$disable_watch" == "1" ]]; then
+    info "ignoreArd set? $ignoreard_state (skipped due DISABLE_WATCH_APPROVE=1)"
+  else
+    info "ignoreArd set? $ignoreard_state"
+  fi
+  if [[ "$timestamp_timeout_value" == "missing" ]]; then
+    info "timestamp_timeout configured? missing"
+  else
+    info "timestamp_timeout configured? $timestamp_timeout_value"
+  fi
 
   if $CHECK_ONLY; then return; fi
 
-  info "Enabling TouchID for sudo (requires sudo)..."
-  echo "$pam_line" | sudo tee "$pam_file" > /dev/null
-  record_applied "TouchID for sudo enabled"
+  local needs_sudo=false
+  if [[ "$pam_present" == "yes" && ( "$sudo_local_exists" == "no" || "$sudo_local_enabled" == "no" ) ]]; then
+    needs_sudo=true
+  fi
+  if [[ "$disable_watch" != "1" && "$ignoreard_state" != "TRUE" ]]; then
+    needs_sudo=true
+  fi
+  if [[ "$timestamp_timeout_value" != "15" ]]; then
+    needs_sudo=true
+  fi
+
+  if $needs_sudo && ! sudo -n true 2>/dev/null; then
+    record_error "Sudo auth not cached; run 'sudo -v' once, then re-run bootstrap (no prompts are used here)"
+    return
+  fi
+
+  if [[ "$pam_present" == "yes" ]]; then
+    if [[ ! -f "$pam_file" ]]; then
+      if [[ -f "$pam_template" ]]; then
+        sudo -n cp "$pam_template" "$pam_file"
+        record_applied "$pam_file created from template"
+      else
+        record_error "Missing $pam_template; cannot safely create $pam_file"
+      fi
+    fi
+
+    if [[ -f "$pam_file" ]]; then
+      local pam_before pam_after
+      pam_before="$(mktemp)"
+      pam_after="$(mktemp)"
+
+      if sudo -n cat "$pam_file" > "$pam_before"; then
+        awk -v canonical="$pam_line" '
+          BEGIN { found = 0 }
+          /^[[:space:]]*#?[[:space:]]*auth[[:space:]]+.*pam_tid\.so([[:space:]].*)?$/ {
+            if (!found) {
+              print canonical
+              found = 1
+            }
+            next
+          }
+          { print }
+          END {
+            if (!found) print canonical
+          }
+        ' "$pam_before" > "$pam_after"
+
+        if ! cmp -s "$pam_before" "$pam_after"; then
+          sudo -n install -m 0644 "$pam_after" "$pam_file"
+          record_applied "$pam_file updated (pam_tid configured)"
+        else
+          ok "$pam_file already configured"
+        fi
+      else
+        record_error "Failed to read $pam_file with sudo"
+      fi
+
+      rm -f "$pam_before" "$pam_after"
+    fi
+  else
+    info "pam_tid not present; skipping sudo_local changes"
+  fi
+
+  if [[ "$disable_watch" == "1" ]]; then
+    info "Skipping Apple Watch helper (DISABLE_WATCH_APPROVE=1)"
+  elif [[ "$ignoreard_state" == "TRUE" ]]; then
+    ok "Apple Watch helper already enabled (ignoreArd=TRUE)"
+  else
+    sudo -n defaults write /Library/Preferences/com.apple.security.authorization.plist ignoreArd -bool TRUE
+    record_applied "Apple Watch helper enabled (ignoreArd=TRUE)"
+  fi
+
+  if [[ "$timestamp_timeout_value" == "15" ]]; then
+    ok "sudo timestamp_timeout already 15"
+  else
+    local timeout_tmp
+    timeout_tmp="$(mktemp)"
+    printf '%s\n' "$timeout_line" > "$timeout_tmp"
+    sudo -n install -m 0440 "$timeout_tmp" "$timeout_file"
+
+    if sudo -n visudo -cf "$timeout_file" >/dev/null 2>&1; then
+      record_applied "sudo timestamp_timeout configured to 15"
+    else
+      sudo -n rm -f "$timeout_file"
+      record_error "Invalid sudoers fragment; removed $timeout_file"
+    fi
+
+    rm -f "$timeout_tmp"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -469,6 +842,7 @@ main() {
   step_homebrew
   step_brewbundle
   step_dotfiles
+  step_git_identity
   step_mise
   step_shell
   step_macos_defaults
