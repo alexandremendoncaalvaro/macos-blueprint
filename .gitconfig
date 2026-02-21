@@ -1,0 +1,24 @@
+[user]
+	name = Your Name
+	email = your@email.com
+
+[init]
+	defaultBranch = main
+
+[core]
+	autocrlf = input
+	excludesfile = ~/.gitignore_global
+
+[pull]
+	rebase = false
+
+[push]
+	autoSetupRemote = true
+
+[alias]
+	lg   = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+	undo = reset HEAD~1 --mixed
+	aliases = config --get-regexp alias
+
+[color]
+	ui = auto
