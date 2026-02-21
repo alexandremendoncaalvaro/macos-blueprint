@@ -143,6 +143,8 @@ step_dotfiles() {
 
   local managed=(
     ".zshenv"
+    ".gitconfig"
+    ".gitignore_global"
     ".config/mise/config.toml"
     ".config/starship.toml"
   )
@@ -221,13 +223,17 @@ step_mise() {
 
   # mise doctor — surface any configuration issues.
   local doctor
-  doctor="$(mise doctor 2>/dev/null)"
+  doctor="$(mise doctor 2>/dev/null || true)"
   if echo "$doctor" | grep -q "No problems found"; then
     ok "mise doctor: clean"
   else
-    echo "$doctor" | grep -E "^\s+\S+.*: (no|warn)" | while IFS= read -r line; do
-      record_warning "mise doctor: $line"
-    done
+    local issues
+    issues="$(echo "$doctor" | grep -E "^\s+\S+.*: (no|warn)" || true)"
+    if [[ -n "$issues" ]]; then
+      while IFS= read -r line; do
+        record_warning "mise doctor: $line"
+      done <<< "$issues"
+    fi
   fi
 
   if $CHECK_ONLY; then
@@ -299,6 +305,21 @@ step_shell() {
       record_applied ".zshrc: $label added"
     fi
   done
+
+  # fzf shell integration (ctrl+r history search, ctrl+t file search).
+  # Requires fzf >= 0.48. Falls back silently if not installed.
+  if command -v fzf &>/dev/null; then
+    local fzf_line='source <(fzf --zsh)'
+    if grep -qF "$fzf_line" "$zshrc" 2>/dev/null; then
+      ok ".zshrc: fzf shell integration"
+    else
+      record_warning ".zshrc missing: fzf shell integration"
+      if ! $CHECK_ONLY; then
+        printf '\n%s\n' "$fzf_line" >> "$zshrc"
+        record_applied ".zshrc: fzf shell integration added"
+      fi
+    fi
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -331,6 +352,15 @@ step_macos_defaults() {
     # Screenshots
     "com.apple.screencapture|disable-shadow|-bool|true|1|screenshots: no window shadow"
     "com.apple.screencapture|type|-string|png|png|screenshots: PNG format"
+    # Input — critical for developers: prevents silent corruption when pasting code
+    "NSGlobalDomain|NSAutomaticSpellingCorrectionEnabled|-bool|false|0|input: disable autocorrect"
+    "NSGlobalDomain|NSAutomaticQuoteSubstitutionEnabled|-bool|false|0|input: disable smart quotes"
+    "NSGlobalDomain|NSAutomaticDashSubstitutionEnabled|-bool|false|0|input: disable smart dashes"
+    # Finder
+    "NSGlobalDomain|AppleShowAllExtensions|-bool|true|1|finder: show all file extensions"
+    # System — prevent .DS_Store from polluting external volumes and repos
+    "com.apple.desktopservices|DSDontWriteNetworkStores|-bool|true|1|system: no .DS_Store on network volumes"
+    "com.apple.desktopservices|DSDontWriteUSBStores|-bool|true|1|system: no .DS_Store on USB drives"
   )
 
   local dock_changed=false
@@ -362,6 +392,31 @@ step_macos_defaults() {
     $dock_changed   && { info "Restarting Dock...";   killall Dock   2>/dev/null || true; }
     $finder_changed && { info "Restarting Finder..."; killall Finder 2>/dev/null || true; }
   fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. TouchID for sudo
+# Writes /etc/pam.d/sudo_local (macOS 13+) so the fingerprint sensor
+# can authorize sudo instead of typing the password every time.
+# ─────────────────────────────────────────────────────────────────────────────
+step_touchid_sudo() {
+  section "TouchID for sudo"
+
+  local pam_file="/etc/pam.d/sudo_local"
+  local pam_line="auth       sufficient     pam_tid.so"
+
+  if [[ -f "$pam_file" ]] && grep -q "pam_tid.so" "$pam_file" 2>/dev/null; then
+    ok "Enabled ($pam_file)"
+    return
+  fi
+
+  record_warning "Not configured — password required for every sudo"
+
+  if $CHECK_ONLY; then return; fi
+
+  info "Enabling TouchID for sudo (requires sudo)..."
+  echo "$pam_line" | sudo tee "$pam_file" > /dev/null
+  record_applied "TouchID for sudo enabled"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -417,6 +472,7 @@ main() {
   step_mise
   step_shell
   step_macos_defaults
+  step_touchid_sudo
 
   print_summary
 }
