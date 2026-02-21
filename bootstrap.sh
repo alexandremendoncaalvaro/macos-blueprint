@@ -204,6 +204,12 @@ git_config_file_has_key() {
   git config --file "$file" --get "$key" >/dev/null 2>&1
 }
 
+git_config_file_get() {
+  local file="$1"
+  local key="$2"
+  git config --file "$file" --get "$key" 2>/dev/null || true
+}
+
 git_config_file_includes_local() {
   local file="$1"
   [[ -e "$file" || -L "$file" ]] || return 1
@@ -246,38 +252,70 @@ git_repo_config_has_identity_entries() {
 resolve_git_identity_seed_values() {
   local __name_var="$1"
   local __email_var="$2"
-  local seed_name=""
-  local seed_email=""
+  local resolved_name=""
+  local resolved_email=""
+  local global_cfg="$HOME/.gitconfig"
+  local backup_cfg="$HOME/.gitconfig.bak"
+  local prefer_backup_values="no"
   local global_name
   local global_email
+
+  if [[ -L "$global_cfg" && -f "$backup_cfg" ]]; then
+    local link_target
+    link_target="$(readlink "$global_cfg")"
+    if [[ "$link_target" != /* ]]; then
+      link_target="$(cd "$(dirname "$global_cfg")" && pwd)/$link_target"
+    fi
+    if [[ "$link_target" == "$DOTFILES/.gitconfig" ]]; then
+      prefer_backup_values="yes"
+    fi
+  fi
 
   global_name="$(git config --global --get user.name 2>/dev/null || true)"
   global_email="$(git config --global --get user.email 2>/dev/null || true)"
 
   if [[ -n "$global_name" && -n "$global_email" ]]; then
-    seed_name="$global_name"
-    seed_email="$global_email"
+    resolved_name="$global_name"
+    resolved_email="$global_email"
   else
-    [[ -n "$global_name" ]] && seed_name="$global_name"
-    [[ -n "$global_email" ]] && seed_email="$global_email"
+    [[ -n "$global_name" ]] && resolved_name="$global_name"
+    [[ -n "$global_email" ]] && resolved_email="$global_email"
 
-    if [[ -z "$seed_email" ]]; then
-      seed_email="$(git config --get user.email 2>/dev/null || true)"
+    if [[ -z "$resolved_email" ]]; then
+      resolved_email="$(git config --get user.email 2>/dev/null || true)"
     fi
 
-    if [[ -z "$seed_name" ]]; then
+    if [[ -f "$backup_cfg" ]]; then
+      if [[ -z "$resolved_name" ]]; then
+        resolved_name="$(git_config_file_get "$backup_cfg" user.name)"
+      fi
+      if [[ -z "$resolved_email" ]]; then
+        resolved_email="$(git_config_file_get "$backup_cfg" user.email)"
+      fi
+    fi
+
+    if [[ -z "$resolved_name" ]]; then
       local dscl_name
       dscl_name="$(dscl . -read "/Users/$USER" RealName 2>/dev/null | sed -n 's/^RealName:[[:space:]]*//p' | head -1)"
       if [[ -n "$dscl_name" ]]; then
-        seed_name="$dscl_name"
+        resolved_name="$dscl_name"
       elif id -F >/dev/null 2>&1; then
-        seed_name="$(id -F 2>/dev/null || true)"
+        resolved_name="$(id -F 2>/dev/null || true)"
       fi
     fi
   fi
 
-  printf -v "$__name_var" '%s' "$seed_name"
-  printf -v "$__email_var" '%s' "$seed_email"
+  if [[ "$prefer_backup_values" == "yes" ]]; then
+    local backup_name
+    local backup_email
+    backup_name="$(git_config_file_get "$backup_cfg" user.name)"
+    backup_email="$(git_config_file_get "$backup_cfg" user.email)"
+    [[ -n "$backup_name" ]] && resolved_name="$backup_name"
+    [[ -n "$backup_email" ]] && resolved_email="$backup_email"
+  fi
+
+  printf -v "$__name_var" '%s' "$resolved_name"
+  printf -v "$__email_var" '%s' "$resolved_email"
 }
 
 append_missing_identity_placeholders() {
@@ -342,8 +380,8 @@ step_git_identity() {
 
   if $CHECK_ONLY; then return; fi
 
-  local seed_name
-  local seed_email
+  local seed_name=""
+  local seed_email=""
   resolve_git_identity_seed_values seed_name seed_email
 
   if [[ ! -f "$local_cfg" ]]; then
