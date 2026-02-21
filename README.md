@@ -42,8 +42,9 @@ The script checks each component in order, reports its state, and fixes only wha
 | Brew bundle | all packages from `Brewfile` satisfied |
 | Dotfiles | each file symlinked, pointing to correct source |
 | mise | installed, shims on PATH, doctor clean, all tools present |
-| Shell | `.zshrc` has `mise activate` + `starship init`, `.zshenv` correct |
-| macOS defaults | keyboard, dock, Finder, screenshot preferences |
+| Shell | `.zshrc` has `mise activate` + `starship init` + `fzf`, `.zshenv` correct |
+| macOS defaults | keyboard, dock, Finder, input, screenshot, DS_Store preferences |
+| TouchID for sudo | `/etc/pam.d/sudo_local` configured for fingerprint auth |
 
 Output example:
 ```
@@ -55,6 +56,8 @@ Output example:
 
 ── Dotfiles
   ✓  ~/.zshenv
+  ✓  ~/.gitconfig
+  ✓  ~/.gitignore_global
   ✓  ~/.config/mise/config.toml
   ✓  ~/.config/starship.toml
 
@@ -63,6 +66,9 @@ Output example:
   ✓  Shims on PATH
   ✓  mise doctor: clean
   ✓  All configured tools installed
+
+── TouchID for sudo
+  ✓  Enabled (/etc/pam.d/sudo_local)
 ```
 
 ## Structure
@@ -72,11 +78,19 @@ dotfiles/
 ├── bootstrap.sh             # check+apply provisioner
 ├── Brewfile                 # packages, casks, VS Code extensions
 ├── .zshenv                  # PATH dedup + mise shims (all shell contexts)
+├── .gitconfig               # global git identity, aliases, defaults
+├── .gitignore_global        # global ignore: .DS_Store, secrets, build artifacts
 └── .config/
     ├── mise/
     │   └── config.toml      # runtimes: node, python, go, rust, ruby, dotnet
     └── starship.toml        # prompt
 ```
+
+> **Note:** `.gitconfig` contains placeholder `name` and `email` values. Update them after cloning:
+> ```bash
+> git config --global user.name "Your Name"
+> git config --global user.email "you@example.com"
+> ```
 
 All config files are symlinked from this repo into `$HOME`. Edit here, changes take effect immediately.
 
