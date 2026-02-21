@@ -3,9 +3,6 @@
 # Usage: brew bundle install --file=Brewfile
 # ─────────────────────────────────────────────────────────────
 
-# Taps
-tap "lizardbyte/homebrew"       # sunshine (game streaming), keep if unused
-
 # System / CLI
 brew "git"
 brew "mise"                     # toolchain manager (node, python, go, ...)
