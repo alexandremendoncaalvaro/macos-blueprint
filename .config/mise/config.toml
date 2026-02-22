@@ -8,7 +8,7 @@ ruby = "latest"
 dotnet = "latest"
 java = "temurin-21"
 maven = "3.9"
-github-cli = "latest"
+github-cli = "2.86.0"
 "npm:@google/gemini-cli" = "latest"
 "npm:@openai/codex" = "latest"
 
