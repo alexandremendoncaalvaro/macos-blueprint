@@ -217,8 +217,13 @@ Managed by [mise](https://mise.jdx.dev/). Declared in `.config/mise/config.toml`
 | Rust | latest |
 | Ruby | latest |
 | .NET | latest |
+| Java | temurin-21 |
+| Maven | 3.9 |
 | pnpm | latest |
 | github-cli | latest |
+
+Java is managed via the `java` plugin with Temurin (`java = "temurin-21"`).
+To customize versions, edit `.config/mise/config.toml` and run `mise install` (or `./bootstrap.sh`).
 
 Python environments and dependencies are handled by [uv](https://docs.astral.sh/uv/).
 
