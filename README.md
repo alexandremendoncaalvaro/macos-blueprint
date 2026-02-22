@@ -1,29 +1,22 @@
 # macos-blueprint
 
-Bootstrap script for a macOS development machine.
+Idempotent bootstrap for macOS development machines.  
+`./bootstrap.sh` inspects current state and applies only missing configuration.
 
-It is safe to re-run: `bootstrap.sh` checks current state first, then fixes only what is missing.
+## Purpose
 
-## What this is
+Keep a Mac development environment reproducible from versioned config in this repository.
 
-A single script (`bootstrap.sh`) plus declarative config files (`Brewfile`, dotfiles, mise config) to bring a machine to a predictable development setup.
+## Scope
 
-## What it sets up
-
-- Xcode Command Line Tools.
-- Homebrew and packages from `Brewfile`.
-- Dotfile symlinks from this repo to `$HOME`.
-- Git identity model (`~/.gitconfig` + `~/.gitconfig.local`).
-- Toolchains with `mise`.
-- Shell integration (`mise`, `starship`, `fzf`).
-- macOS developer defaults (keyboard, dock, Finder, screenshots, input).
-- `sudo` Touch ID integration (`pam_tid`) when available.
-
-## What it does not do
-
-- Does not configure Apple Watch integration for `sudo`.
-- Does not change sudo timeout policy (`timestamp_timeout`, `tty_tickets`, etc.).
-- Does not create/remove `NOPASSWD` sudo overrides.
+- Install and validate Xcode Command Line Tools.
+- Install Homebrew and reconcile packages from `Brewfile`.
+- Link managed dotfiles into `$HOME`.
+- Enforce Git identity split (`~/.gitconfig` + `~/.gitconfig.local`).
+- Install and validate toolchains with `mise`.
+- Configure shell integration (`mise`, `starship`, `fzf`).
+- Apply macOS developer defaults.
+- Configure `sudo` Touch ID (`pam_tid`) when available.
 
 ## Usage
 
@@ -60,7 +53,7 @@ This section documents what each bootstrap area configures and why it exists.
 
 ### 3) Brew Bundle (`Brewfile`)
 
-The bootstrap uses `brew bundle` as the package source of truth. Current items:
+Packages are declared in `Brewfile` and enforced via `brew bundle`:
 
 **CLI tools**
 
