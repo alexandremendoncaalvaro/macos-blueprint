@@ -16,6 +16,7 @@ Keep a Mac development environment reproducible from versioned config in this re
 - Install and validate toolchains with `mise`.
 - Configure shell integration (`mise`, `starship`, `fzf`).
 - Apply macOS developer defaults.
+- Offload user folders and dev tool data to external SSD (`/Volumes/MacMini`).
 - Configure `sudo` Touch ID (`pam_tid`) when available.
 
 ## Usage
@@ -66,6 +67,7 @@ Packages are declared in `Brewfile` and enforced via `brew bundle`:
 - `ripgrep`: fast recursive code search (`rg`).
 - `bat`: file viewer with syntax highlighting.
 - `eza`: modern `ls` replacement with rich output.
+- `ffmpeg`: video/audio processing.
 
 **Fonts**
 
@@ -77,12 +79,17 @@ Packages are declared in `Brewfile` and enforced via `brew bundle`:
 - `visual-studio-code`: editor/IDE.
 - `google-chrome`: browser.
 - `maccy`: clipboard history manager.
+- `tailscale-app`: VPN / mesh networking.
 - `chatgpt`, `antigravity`, `blip`, `handy`, `logi-options+`, `rive`, `codex-app`, `copilot-cli`, `claude-code`: machine-level apps/tools intentionally pinned in setup.
 
 **VS Code extensions**
 
+- `anthropic.claude-code`
 - `github.copilot-chat`
+- `github.vscode-github-actions`
 - `google.gemini-cli-vscode-ide-companion`
+- `ms-azuretools.vscode-containers`
+- `ms-vscode-remote.remote-containers`, `remote-ssh`, `remote-ssh-edit`, `remote-explorer`
 
 ### 4) Dotfiles linking
 
@@ -139,7 +146,28 @@ The script enforces the following defaults:
 | System | `DSDontWriteNetworkStores` | `true` | avoid `.DS_Store` on network mounts |
 | System | `DSDontWriteUSBStores` | `true` | avoid `.DS_Store` on USB volumes |
 
-### 9) sudo authentication
+### 9) External SSD storage (MacMini)
+
+Offloads user folders and dev tool data to an external NVMe SSD at `/Volumes/MacMini`.
+
+**Skipped entirely when the volume is not mounted** — safe to run on machines without the SSD.
+
+| What | Internal path | External target |
+|------|---------------|-----------------|
+| Dev, Documents, Downloads, Desktop, Pictures, Movies, Music | `~/` | `/Volumes/MacMini/Home/` |
+| Homebrew cache | `~/Library/Caches/Homebrew` | `/Volumes/MacMini/Homebrew/Cache` |
+| Playwright browsers | `~/.cache/ms-playwright` | `/Volumes/MacMini/playwright` |
+| mise installs | `~/.local/share/mise` | `/Volumes/MacMini/mise` |
+| Rust toolchains | `~/.rustup` | `/Volumes/MacMini/rustup` |
+| Cargo | `~/.cargo` | `/Volumes/MacMini/cargo` |
+| npm cache | `~/.npm` | `/Volumes/MacMini/npm-cache` |
+| pnpm store | (default) | `/Volumes/MacMini/pnpm-store` |
+| Xcode DerivedData | `~/Library/Developer/Xcode/DerivedData` | `/Volumes/MacMini/DerivedData` |
+
+Environment variables are set in `.zshenv` so they apply in all shell contexts.
+Home folder symlinks require initial migration (`rsync` + `sudo rm` + `ln -s`); bootstrap reports the commands needed if folders haven't been migrated yet.
+
+### 10) sudo authentication
 
 Bootstrap configures this behavior:
 
@@ -174,6 +202,18 @@ Output example:
   ✓  Shims on PATH
   ✓  mise doctor: clean
   ✓  All configured tools installed
+
+── External SSD (MacMini)
+  ✓  Volume mounted at /Volumes/MacMini
+  ✓  ~/Dev → /Volumes/MacMini/Home/Dev
+  ✓  ~/Documents → /Volumes/MacMini/Home/Documents
+  ✓  ~/Downloads → /Volumes/MacMini/Home/Downloads
+  ✓  ~/Desktop → /Volumes/MacMini/Home/Desktop
+  ✓  ~/Pictures → /Volumes/MacMini/Home/Pictures
+  ✓  ~/Movies → /Volumes/MacMini/Home/Movies
+  ✓  ~/Music → /Volumes/MacMini/Home/Music
+  ✓  pnpm store → /Volumes/MacMini/pnpm-store
+  ✓  Xcode DerivedData → /Volumes/MacMini/DerivedData
 
 ── sudo authentication
   ·  pam_tid module present? yes
@@ -220,7 +260,9 @@ Managed by [mise](https://mise.jdx.dev/). Declared in `.config/mise/config.toml`
 | Java | temurin-21 |
 | Maven | 3.9 |
 | pnpm | latest |
-| github-cli | latest |
+| GitHub CLI | latest |
+| Gemini CLI | latest (npm) |
+| Codex CLI | latest (npm) |
 
 Java is managed via the `java` plugin with Temurin (`java = "temurin-21"`).
 To customize versions, edit `.config/mise/config.toml` and run `mise install` (or `./bootstrap.sh`).
