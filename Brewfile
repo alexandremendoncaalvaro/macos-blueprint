@@ -16,6 +16,9 @@ brew "ripgrep"                  # faster grep (rg)
 brew "bat"                      # better cat — syntax highlighting, line numbers
 brew "eza"                      # better ls — colors, git status, icons
 
+# Media
+brew "ffmpeg"                   # video/audio processing
+
 # Fonts
 cask "font-meslo-lg-nerd-font"  # required for starship icons
 
@@ -33,7 +36,15 @@ cask "rive"
 cask "codex-app"
 cask "copilot-cli"
 cask "claude-code"
+cask "tailscale-app"                # VPN / mesh networking
 
 # VS Code extensions
+vscode "anthropic.claude-code"
 vscode "github.copilot-chat"
+vscode "github.vscode-github-actions"
 vscode "google.gemini-cli-vscode-ide-companion"
+vscode "ms-azuretools.vscode-containers"
+vscode "ms-vscode-remote.remote-containers"
+vscode "ms-vscode-remote.remote-ssh"
+vscode "ms-vscode-remote.remote-ssh-edit"
+vscode "ms-vscode.remote-explorer"
