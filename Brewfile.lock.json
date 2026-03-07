@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-07T03:07:35Z",
+  "generated": "2026-03-07T03:13:32Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -39,7 +39,6 @@
     "copilot-cli": "1.0.2",
     "font-meslo-lg-nerd-font": "3.4.0",
     "google-chrome": "145.0.7632.76",
-    "handy": "0.7.7",
     "logi-options+": "1.99.834046",
     "maccy": "2.6.1",
     "orbstack": "2.0.5,19905",

@@ -30,7 +30,6 @@ cask "maccy"                    # clipboard manager
 cask "chatgpt"
 cask "antigravity"
 cask "blip"
-cask "handy"
 cask "logi-options+"
 cask "rive"
 cask "codex-app"
