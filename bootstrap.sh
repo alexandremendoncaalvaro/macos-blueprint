@@ -698,6 +698,35 @@ step_external_ssd() {
     fi
   done
 
+  # ── Acquire sudo if needed for home folder migration ────────────────────
+  local need_sudo=false
+  local sudo_cmd=(sudo -n)
+
+  for name in Dev Documents Downloads Desktop Pictures Movies Music; do
+    local link="$HOME/$name"
+    if [[ -d "$link" && ! -L "$link" ]]; then
+      need_sudo=true
+      break
+    fi
+  done
+
+  if ! $CHECK_ONLY && $need_sudo; then
+    if ! sudo -n true 2>/dev/null; then
+      if [[ -t 0 && -t 1 ]]; then
+        info "Admin authentication required to migrate home folders to SSD"
+        if ! sudo -v; then
+          record_error "Failed to acquire sudo credentials; cannot migrate home folders"
+          need_sudo=false
+        else
+          sudo_cmd=(sudo)
+        fi
+      else
+        record_error "Sudo auth not cached; run 'sudo -v' once, then re-run bootstrap"
+        need_sudo=false
+      fi
+    fi
+  fi
+
   # ── Home folder symlinks ──────────────────────────────────────────────────
   local home_links=(
     "Dev:$volume/Home/Dev"
@@ -714,17 +743,32 @@ step_external_ssd() {
     local target="${entry##*:}"
     local link="$HOME/$name"
 
+    # Already correct.
     if [[ -L "$link" && "$(readlink "$link")" == "$target" ]]; then
       ok "~/$name → $target"
       continue
     fi
 
+    # Local directory exists — needs migration.
     if [[ -d "$link" && ! -L "$link" ]]; then
       record_warning "~/$name is a local directory (not symlinked to SSD)"
-      info "To migrate: rsync -avh ~/$name/ $target/ && sudo rm -rf ~/$name && ln -s $target ~/$name"
+      if $CHECK_ONLY; then continue; fi
+
+      # Sync contents to SSD (idempotent — skips existing files).
+      info "Syncing ~/$name → $target ..."
+      rsync -ah "$link/" "$target/"
+
+      # Remove the local directory (requires sudo for macOS-protected folders).
+      if "${sudo_cmd[@]}" rm -rf "$link" 2>/dev/null; then
+        ln -s "$target" "$link"
+        record_applied "~/$name migrated and symlinked → $target"
+      else
+        record_error "~/$name: failed to remove local directory (grant Full Disk Access to Terminal)"
+      fi
       continue
     fi
 
+    # Symlink exists but wrong target.
     if [[ -L "$link" ]]; then
       record_warning "~/$name → $(readlink "$link") (wrong target)"
       if $CHECK_ONLY; then continue; fi
@@ -733,7 +777,7 @@ step_external_ssd() {
       continue
     fi
 
-    # Does not exist — create symlink
+    # Does not exist — create symlink directly.
     if $CHECK_ONLY; then
       record_warning "~/$name not linked"
       continue
@@ -759,7 +803,12 @@ step_external_ssd() {
 
     if [[ -d "$link" && ! -L "$link" ]]; then
       record_warning "~/$name is a local directory (not symlinked to SSD)"
-      info "To migrate: rsync -avh ~/$name/ $target/ && rm -rf ~/$name && ln -s $target ~/$name"
+      if $CHECK_ONLY; then continue; fi
+      info "Syncing ~/$name → $target ..."
+      rsync -ah "$link/" "$target/"
+      rm -rf "$link"
+      ln -s "$target" "$link"
+      record_applied "~/$name migrated and symlinked → $target"
       continue
     fi
 

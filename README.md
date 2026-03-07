@@ -165,7 +165,7 @@ Offloads user folders and dev tool data to an external NVMe SSD at `/Volumes/Mac
 | Xcode DerivedData | `~/Library/Developer/Xcode/DerivedData` | `/Volumes/MacMini/DerivedData` |
 
 Environment variables are set in `.zshenv` so they apply in all shell contexts.
-Home folder symlinks require initial migration (`rsync` + `sudo rm` + `ln -s`); bootstrap reports the commands needed if folders haven't been migrated yet.
+Home folder migration is fully automatic: bootstrap syncs local contents to the SSD via `rsync`, removes the local directory with `sudo`, and creates the symlink. On a fresh install where the SSD already has the data, the rsync is a no-op and only the symlink is created.
 
 ### 10) sudo authentication
 
