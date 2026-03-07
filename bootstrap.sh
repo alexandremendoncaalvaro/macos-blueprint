@@ -1019,38 +1019,6 @@ step_drift_check() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 12. Kiro CLI autocomplete spec for `mac` command
-# Installs the Fig-compatible completion spec so Kiro CLI shows subcommand
-# suggestions when typing `mac `.
-# ─────────────────────────────────────────────────────────────────────────────
-step_kiro_autocomplete() {
-  section "Kiro CLI Autocomplete"
-
-  local spec_src="$DOTFILES/scripts/mac.js"
-  local spec_dir="$HOME/.fig/autocomplete/build"
-  local spec_dst="$spec_dir/mac.js"
-  local spec_alias="$spec_dir/dotfiles.sh.js"
-
-  if [[ ! -f "$spec_src" ]]; then
-    record_warning "mac.js spec not found in repo — skipping"
-    return
-  fi
-
-  if [[ -f "$spec_dst" ]] && cmp -s "$spec_src" "$spec_dst"; then
-    ok "mac autocomplete spec installed"
-    return
-  fi
-
-  record_warning "mac autocomplete spec not installed or outdated"
-  if $CHECK_ONLY; then return; fi
-
-  mkdir -p "$spec_dir"
-  cp "$spec_src" "$spec_dst"
-  cp "$spec_src" "$spec_alias"
-  record_applied "mac autocomplete spec installed"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 print_summary() {
@@ -1107,7 +1075,6 @@ main() {
   step_external_ssd
   step_touchid_sudo
   step_drift_check
-  step_kiro_autocomplete
 
   print_summary
 }
