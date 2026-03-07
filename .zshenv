@@ -4,6 +4,10 @@ typeset -U PATH
 # mise shims — available in all shell contexts (scripts, editors, CI)
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
+# dotfiles helper
+export PATH="$HOME/dotfiles/scripts:$PATH"
+alias dotfiles='dotfiles.sh'
+
 # External SSD (MacMini) — redirect caches and tool data to external storage
 # These exports are safe even if the volume is not mounted; tools fall back gracefully.
 export HOMEBREW_CACHE=/Volumes/MacMini/Homebrew/Cache
