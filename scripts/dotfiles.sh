@@ -38,6 +38,16 @@ update_lock() {
   fi
 }
 
+auto_commit() {
+  local action="$1" name="$2"
+  cd "$DOTFILES"
+  git add Brewfile Brewfile.lock.json
+  if ! git diff --cached --quiet; then
+    git commit -m "feat(brew): $action $name"
+    printf "${GREEN}Committed: feat(brew): %s %s${RESET}\n" "$action" "$name"
+  fi
+}
+
 # ── Detect package type from Brewfile or brew info ──────────────────────────
 detect_type() {
   local name="$1"
@@ -112,9 +122,7 @@ cmd_add() {
   esac
 
   update_lock
-
-  printf "\n${BOLD}Don't forget to commit:${RESET}\n"
-  printf "  cd ~/dotfiles && git add Brewfile Brewfile.lock.json && git commit -m 'feat(brew): add %s'\n" "$name"
+  auto_commit "add" "$name"
 }
 
 # ── Remove ──────────────────────────────────────────────────────────────────
@@ -153,9 +161,7 @@ cmd_remove() {
   fi
 
   update_lock
-
-  printf "\n${BOLD}Don't forget to commit:${RESET}\n"
-  printf "  cd ~/dotfiles && git add Brewfile Brewfile.lock.json && git commit -m 'feat(brew): remove %s'\n" "$name"
+  auto_commit "remove" "$name"
 }
 
 # ── Main ────────────────────────────────────────────────────────────────────
