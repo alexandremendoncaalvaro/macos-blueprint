@@ -651,7 +651,163 @@ step_macos_defaults() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 9. sudo authentication (Touch ID for sudo)
+# 9. External SSD storage (MacMini)
+# Offloads user folders and dev tool data to an external NVMe SSD.
+# Creates target directories, symlinks home folders, and configures
+# per-tool storage paths. Skipped entirely when the volume is not mounted.
+# ─────────────────────────────────────────────────────────────────────────────
+step_external_ssd() {
+  section "External SSD (MacMini)"
+
+  local volume="/Volumes/MacMini"
+
+  if [[ ! -d "$volume" ]]; then
+    info "Volume $volume not mounted — skipping"
+    return
+  fi
+
+  ok "Volume mounted at $volume"
+
+  # ── Target directories on the SSD ─────────────────────────────────────────
+  local ssd_dirs=(
+    "$volume/Home/Dev"
+    "$volume/Home/Documents"
+    "$volume/Home/Downloads"
+    "$volume/Home/Desktop"
+    "$volume/Home/Pictures"
+    "$volume/Home/Movies"
+    "$volume/Home/Music"
+    "$volume/Homebrew/Cache"
+    "$volume/playwright"
+    "$volume/mise"
+    "$volume/rustup"
+    "$volume/cargo"
+    "$volume/npm-cache"
+    "$volume/pnpm-store"
+    "$volume/DerivedData"
+  )
+
+  for dir in "${ssd_dirs[@]}"; do
+    if [[ ! -d "$dir" ]]; then
+      if $CHECK_ONLY; then
+        record_warning "Directory missing: $dir"
+        continue
+      fi
+      mkdir -p "$dir"
+      record_applied "Created $dir"
+    fi
+  done
+
+  # ── Home folder symlinks ──────────────────────────────────────────────────
+  local home_links=(
+    "Dev:$volume/Home/Dev"
+    "Documents:$volume/Home/Documents"
+    "Downloads:$volume/Home/Downloads"
+    "Desktop:$volume/Home/Desktop"
+    "Pictures:$volume/Home/Pictures"
+    "Movies:$volume/Home/Movies"
+    "Music:$volume/Home/Music"
+  )
+
+  for entry in "${home_links[@]}"; do
+    local name="${entry%%:*}"
+    local target="${entry##*:}"
+    local link="$HOME/$name"
+
+    if [[ -L "$link" && "$(readlink "$link")" == "$target" ]]; then
+      ok "~/$name → $target"
+      continue
+    fi
+
+    if [[ -d "$link" && ! -L "$link" ]]; then
+      record_warning "~/$name is a local directory (not symlinked to SSD)"
+      info "To migrate: rsync -avh ~/$name/ $target/ && sudo rm -rf ~/$name && ln -s $target ~/$name"
+      continue
+    fi
+
+    if [[ -L "$link" ]]; then
+      record_warning "~/$name → $(readlink "$link") (wrong target)"
+      if $CHECK_ONLY; then continue; fi
+      ln -sf "$target" "$link"
+      record_applied "~/$name re-linked to $target"
+      continue
+    fi
+
+    # Does not exist — create symlink
+    if $CHECK_ONLY; then
+      record_warning "~/$name not linked"
+      continue
+    fi
+    ln -s "$target" "$link"
+    record_applied "~/$name → $target"
+  done
+
+  # ── Dev tool symlinks ─────────────────────────────────────────────────────
+  local tool_links=(
+    ".npm:$volume/npm-cache"
+  )
+
+  for entry in "${tool_links[@]}"; do
+    local name="${entry%%:*}"
+    local target="${entry##*:}"
+    local link="$HOME/$name"
+
+    if [[ -L "$link" && "$(readlink "$link")" == "$target" ]]; then
+      ok "~/$name → $target"
+      continue
+    fi
+
+    if [[ -d "$link" && ! -L "$link" ]]; then
+      record_warning "~/$name is a local directory (not symlinked to SSD)"
+      info "To migrate: rsync -avh ~/$name/ $target/ && rm -rf ~/$name && ln -s $target ~/$name"
+      continue
+    fi
+
+    if $CHECK_ONLY; then
+      [[ ! -e "$link" ]] && record_warning "~/$name not linked"
+      continue
+    fi
+
+    [[ -L "$link" ]] && rm "$link"
+    ln -s "$target" "$link"
+    record_applied "~/$name → $target"
+  done
+
+  # ── pnpm store ────────────────────────────────────────────────────────────
+  if command -v pnpm &>/dev/null; then
+    local current_store
+    current_store="$(pnpm config get store-dir 2>/dev/null || true)"
+    local expected_store="$volume/pnpm-store"
+
+    if [[ "$current_store" == "$expected_store" ]]; then
+      ok "pnpm store → $expected_store"
+    else
+      record_warning "pnpm store: '$current_store' (expected '$expected_store')"
+      if ! $CHECK_ONLY; then
+        pnpm config set store-dir "$expected_store"
+        record_applied "pnpm store → $expected_store"
+      fi
+    fi
+  fi
+
+  # ── Xcode DerivedData ────────────────────────────────────────────────────
+  local xcode_dd
+  xcode_dd="$(defaults read com.apple.dt.Xcode IDECustomDerivedDataLocation 2>/dev/null || true)"
+  local expected_dd="$volume/DerivedData"
+
+  if [[ "$xcode_dd" == "$expected_dd" ]]; then
+    ok "Xcode DerivedData → $expected_dd"
+  else
+    record_warning "Xcode DerivedData: '${xcode_dd:-default}' (expected '$expected_dd')"
+    if ! $CHECK_ONLY; then
+      defaults write com.apple.dt.Xcode IDECustomDerivedDataLocation "$expected_dd"
+      record_applied "Xcode DerivedData → $expected_dd"
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. sudo authentication (Touch ID for sudo)
 #
 # Rollback:
 #   - Remove /etc/pam.d/sudo_local to revert PAM behavior.
@@ -824,6 +980,7 @@ main() {
   step_mise
   step_shell
   step_macos_defaults
+  step_external_ssd
   step_touchid_sudo
 
   print_summary
