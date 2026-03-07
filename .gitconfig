@@ -22,3 +22,9 @@
 	path = ~/.gitconfig.local
 
 # user.name and user.email must live in ~/.gitconfig.local
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/bin/env gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !/usr/bin/env gh auth git-credential
