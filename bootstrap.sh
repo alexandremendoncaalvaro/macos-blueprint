@@ -127,8 +127,18 @@ step_brewbundle() {
   if $CHECK_ONLY; then return; fi
 
   info "Running brew bundle install..."
-  brew bundle install --file="$brewfile"
-  record_applied "brew bundle: all packages installed"
+  if brew bundle install --file="$brewfile"; then
+    record_applied "brew bundle: all packages installed"
+  else
+    record_warning "brew bundle: some packages failed (check output above)"
+  fi
+
+  # Update lockfile with exact installed versions.
+  local lockscript="$DOTFILES/scripts/brew-lock.py"
+  if [[ -x "$lockscript" ]] && command -v python3 &>/dev/null; then
+    python3 "$lockscript"
+    record_applied "Brewfile.lock.json updated"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -976,6 +986,39 @@ step_touchid_sudo() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 11. Drift check (weekly launchd job)
+# Installs a launchd agent that runs bootstrap --check every Monday at 10:00
+# and sends a macOS notification if drift is detected.
+# ─────────────────────────────────────────────────────────────────────────────
+step_drift_check() {
+  section "Drift Check"
+
+  local plist_src="$DOTFILES/scripts/com.dotfiles.drift-check.plist"
+  local plist_dst="$HOME/Library/LaunchAgents/com.dotfiles.drift-check.plist"
+
+  if [[ ! -f "$plist_src" ]]; then
+    record_warning "Drift check plist not found in repo — skipping"
+    return
+  fi
+
+  if [[ -f "$plist_dst" ]] && cmp -s "$plist_src" "$plist_dst"; then
+    ok "Drift check agent installed (Mondays 10:00)"
+    return
+  fi
+
+  record_warning "Drift check agent not installed or outdated"
+  if $CHECK_ONLY; then return; fi
+
+  mkdir -p "$HOME/Library/LaunchAgents"
+  cp "$plist_src" "$plist_dst"
+
+  # Unload old version if loaded, then load new one.
+  launchctl bootout "gui/$(id -u)/com.dotfiles.drift-check" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$plist_dst"
+  record_applied "Drift check agent installed"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 print_summary() {
@@ -1031,6 +1074,7 @@ main() {
   step_macos_defaults
   step_external_ssd
   step_touchid_sudo
+  step_drift_check
 
   print_summary
 }
