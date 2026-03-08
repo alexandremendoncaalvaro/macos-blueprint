@@ -38,6 +38,8 @@ ${BOLD}System:${RESET}
   mac check                                    Full diagnostic (no changes)
   mac sync                                     Apply all fixes
   mac cleanup                                  Remove caches and unused packages
+  mac disk                                     Analyze disk usage (mole)
+  mac uninstall [app]                          Remove app + leftover files (mole)
 
 ${BOLD}Repo:${RESET}
   mac lock                                     Regenerate Brewfile.lock.json
@@ -260,6 +262,12 @@ cmd_cleanup() {
   brew cleanup --prune=all
   mise prune -y 2>/dev/null || true
 
+  # Mole deep clean
+  if command -v mo &>/dev/null; then
+    printf "\n${BOLD}Deep clean (mole)...${RESET}\n\n"
+    mo clean
+  fi
+
   # Xcode DerivedData
   local dd="/Volumes/MacMini/DerivedData"
   if [[ -d "$dd" ]]; then
@@ -291,7 +299,9 @@ case "$1" in
   sync)     exec "$DOTFILES/bootstrap.sh" ;;
   lock)     update_lock ;;
   update)   cmd_update ;;
-  cleanup)  cmd_cleanup ;;
-  push)     cmd_push ;;
-  *)        usage ;;
+  cleanup)    cmd_cleanup ;;
+  push)       cmd_push ;;
+  disk)       command -v mo &>/dev/null && exec mo analyze || printf "${RED}mole (mo) not installed${RESET}\n" ;;
+  uninstall)  shift; command -v mo &>/dev/null && exec mo uninstall "$@" || printf "${RED}mole (mo) not installed${RESET}\n" ;;
+  *)          usage ;;
 esac
