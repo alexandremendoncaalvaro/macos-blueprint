@@ -1,6 +1,6 @@
 # macos-blueprint
 
-Idempotent bootstrap for macOS development machines.  
+Idempotent bootstrap for macOS development machines.
 `./bootstrap.sh` inspects current state and applies only missing configuration.
 
 ## Purpose
@@ -14,12 +14,14 @@ Keep a Mac development environment reproducible from versioned config in this re
 - Link managed dotfiles into `$HOME`.
 - Enforce Git identity split (`~/.gitconfig` + `~/.gitconfig.local`).
 - Install and validate toolchains with `mise`.
+- Install TUI dependencies (Node.js via mise, `@clack/prompts`).
 - Configure shell integration (`mise`, `starship`, `fzf`).
 - Apply macOS developer defaults.
 - Offload user folders and dev tool data to external SSD (`/Volumes/MacMini`).
 - Configure `sudo` Touch ID (`pam_tid`) when available.
+- Weekly drift detection with macOS notification.
 
-## Usage
+## Quick start
 
 **Fresh machine**
 ```bash
@@ -36,6 +38,60 @@ cd ~/dotfiles && ./bootstrap.sh
 ```bash
 ./bootstrap.sh
 ```
+
+## The `mac` CLI
+
+After bootstrap, the `mac` command (alias for `scripts/dotfiles.sh`) is available in every shell.
+
+### Interactive TUI
+
+Run `mac` with no arguments to open the interactive terminal interface:
+
+```bash
+mac
+```
+
+The TUI uses `@clack/prompts` (Node.js) and shows a quick status dashboard on launch, then a menu for all operations. Sub-menus group related actions (e.g. Packages > Add / Remove / List).
+
+Built with the existing stack — Node LTS is already managed by mise, so the only extra dependencies are `@clack/prompts` and `picocolors` (4 npm packages total).
+
+### Direct commands
+
+All commands also work non-interactively for scripting and quick one-offs:
+
+```bash
+# Package management
+mac add <name> [--cask|--formula|--vscode]   # install and track
+mac remove <name>                            # uninstall and untrack
+mac list                                     # show tracked packages
+mac update                                   # upgrade all + commit lockfile
+
+# System
+mac status                                   # quick health check
+mac check                                    # full diagnostic (no changes)
+mac sync                                     # apply all bootstrap fixes
+mac cleanup                                  # brew + mise + mole clean
+mac disk                                     # analyze disk usage (mole)
+mac uninstall [app]                          # remove app + leftover files (mole)
+
+# Repo
+mac lock                                     # regenerate Brewfile.lock.json
+mac push                                     # push dotfiles to remote
+```
+
+### Mole integration
+
+[mole](https://github.com/nicholasgasior/mole) (`mo`) is a Go CLI for macOS maintenance. The `mac` CLI integrates it where it makes sense:
+
+| `mac` command | What runs | Purpose |
+|---------------|-----------|---------|
+| `mac cleanup` | `brew cleanup` + `mise prune` + `mo clean` | Free space from caches, logs, temp files |
+| `mac disk` | `mo analyze` | Interactive disk usage explorer |
+| `mac uninstall` | `mo uninstall` | Remove apps with leftover files |
+
+The TUI cleanup menu also offers `mo purge` (node_modules, target/, .build/) and `mo installer` (old .dmg/.pkg) as selectable options.
+
+> Touch ID for sudo is handled by bootstrap step 10, not duplicated from mole.
 
 ## Detailed Reference
 
@@ -68,6 +124,7 @@ Packages are declared in `Brewfile` and enforced via `brew bundle`:
 - `bat`: file viewer with syntax highlighting.
 - `eza`: modern `ls` replacement with rich output.
 - `ffmpeg`: video/audio processing.
+- `mole`: macOS maintenance CLI (cleanup, disk analysis, app removal).
 
 **Fonts**
 
@@ -80,7 +137,7 @@ Packages are declared in `Brewfile` and enforced via `brew bundle`:
 - `google-chrome`: browser.
 - `maccy`: clipboard history manager.
 - `tailscale-app`: VPN / mesh networking.
-- `chatgpt`, `antigravity`, `blip`, `handy`, `logi-options+`, `rive`, `codex-app`, `copilot-cli`, `claude-code`: machine-level apps/tools intentionally pinned in setup.
+- `chatgpt`, `antigravity`, `blip`, `logi-options+`, `rive`, `codex-app`, `copilot-cli`, `claude-code`: machine-level apps/tools intentionally pinned in setup.
 
 **VS Code extensions**
 
@@ -113,6 +170,12 @@ Packages are declared in `Brewfile` and enforced via `brew bundle`:
 - Checks shims path (`~/.local/share/mise/shims`) is present in `PATH`.
 - Runs `mise doctor` checks.
 - Installs missing runtimes/tools declared in `.config/mise/config.toml`.
+
+### 6b) TUI dependencies
+
+- Checks `scripts/tui/node_modules` exists.
+- Runs `npm install --production` if missing (requires Node from mise).
+- Lightweight: only `@clack/prompts` + `picocolors` (4 packages total).
 
 ### 7) Shell configuration
 
@@ -177,63 +240,39 @@ Bootstrap configures this behavior:
 
 Status is always reported in `--check` mode for PAM module presence and `sudo_local` state.
 
-Output example:
-```
-── Xcode CLI Tools
-  ✓  Installed at /Library/Developer/CommandLineTools
+### 11) Drift check
 
-── Homebrew
-  ✓  Homebrew 5.0.14 at /opt/homebrew
-
-── Dotfiles
-  ✓  ~/.zshenv
-  ✓  ~/.gitconfig
-  ✓  ~/.gitignore_global
-  ✓  ~/.config/mise/config.toml
-  ✓  ~/.config/starship.toml
-
-── Git Identity
-  ·  ~/.gitconfig includes ~/.gitconfig.local? yes
-  ·  ~/.gitconfig.local has user.name? yes
-  ·  ~/.gitconfig.local has user.email? yes
-
-── mise
-  ✓  mise 2026.x macos-arm64
-  ✓  Shims on PATH
-  ✓  mise doctor: clean
-  ✓  All configured tools installed
-
-── External SSD (MacMini)
-  ✓  Volume mounted at /Volumes/MacMini
-  ✓  ~/Dev → /Volumes/MacMini/Home/Dev
-  ✓  ~/Documents → /Volumes/MacMini/Home/Documents
-  ✓  ~/Downloads → /Volumes/MacMini/Home/Downloads
-  ✓  ~/Desktop → /Volumes/MacMini/Home/Desktop
-  ✓  ~/Pictures → /Volumes/MacMini/Home/Pictures
-  ✓  ~/Movies → /Volumes/MacMini/Home/Movies
-  ✓  ~/Music → /Volumes/MacMini/Home/Music
-  ✓  pnpm store → /Volumes/MacMini/pnpm-store
-  ✓  Xcode DerivedData → /Volumes/MacMini/DerivedData
-
-── sudo authentication
-  ·  pam_tid module present? yes
-  ·  sudo_local exists? yes
-  ·  sudo_local pam_tid line enabled? yes (configured)
-```
+A launchd agent runs `bootstrap.sh --check` every Monday at 10:00 and sends a macOS notification if drift is detected.
 
 ## Structure
 
 ```
 dotfiles/
-├── bootstrap.sh             # check+apply provisioner
-├── Brewfile                 # packages, casks, VS Code extensions
-├── .zshenv                  # PATH dedup + mise shims (all shell contexts)
-├── .gitconfig               # shared git defaults + includes ~/.gitconfig.local
-├── .gitignore_global        # global ignore: .DS_Store, secrets, build artifacts
-└── .config/
-    ├── mise/
-    │   └── config.toml      # runtimes: node, python, go, rust, ruby, dotnet
-    └── starship.toml        # prompt
+├── bootstrap.sh                 # check+apply provisioner (11 steps)
+├── Brewfile                     # packages, casks, VS Code extensions
+├── Brewfile.lock.json           # exact installed versions (auto-generated)
+├── .zshenv                      # PATH dedup + mise shims + SSD env vars
+├── .gitconfig                   # shared git defaults + includes ~/.gitconfig.local
+├── .gitignore_global            # global ignore: .DS_Store, secrets, build artifacts
+├── .config/
+│   ├── mise/
+│   │   └── config.toml          # runtimes: node, python, go, rust, ruby, dotnet, java
+│   └── starship.toml            # prompt theme
+└── scripts/
+    ├── dotfiles.sh              # mac CLI entry point (alias: mac)
+    ├── brew-lock.py             # generates Brewfile.lock.json
+    ├── drift-check.sh           # weekly drift detection + notification
+    ├── com.dotfiles.drift-check.plist  # launchd agent definition
+    └── tui/                     # interactive terminal UI
+        ├── package.json         # @clack/prompts + picocolors
+        └── src/
+            ├── app.js           # main menu loop
+            ├── config.js        # paths (DOTFILES, BREWFILE)
+            ├── exec.js          # shell helpers (run, runAsync, runLive)
+            ├── status.js        # quick status dashboard
+            ├── packages.js      # add / remove / list sub-menu
+            ├── cleanup.js       # cleanup with mole integration
+            └── update.js        # upgrade all + lockfile + commit
 ```
 
 > **Note:** personal Git identity is stored in `~/.gitconfig.local` (non-versioned, machine-local).
@@ -271,7 +310,14 @@ Python environments and dependencies are handled by [uv](https://docs.astral.sh/
 
 ## Customization
 
-**Add a brew package:**
+**Add a package (recommended: use `mac` CLI):**
+```bash
+mac add ripgrep              # auto-detects type
+mac add visual-studio-code   # auto-detects as cask
+mac add github.copilot --vscode  # explicit type
+```
+
+**Add a package (manual):**
 ```bash
 # 1. install it
 brew install <package>
@@ -300,13 +346,22 @@ git add Brewfile && git commit -m "feat(brew): add <package>"
 ## Maintenance
 
 ```bash
+# interactive — opens TUI with status dashboard
+mac
+
 # check state anytime
-./bootstrap.sh --check
+mac check
 
-# update brew packages
-brew update && brew upgrade
+# upgrade everything (brew + mise + lockfile + auto-commit)
+mac update
 
-# update runtimes
+# free disk space (brew + mise + mole)
+mac cleanup
+
+# analyze disk usage
+mac disk
+
+# update runtimes only
 mise upgrade
 
 # update uv itself

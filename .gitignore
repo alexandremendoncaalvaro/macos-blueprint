@@ -1,3 +1,4 @@
 .DS_Store
 *.bak
+.claude/
 scripts/tui/node_modules/
