@@ -27,6 +27,9 @@ usage() {
   cat <<EOF
 ${BOLD}mac${RESET} — manage macOS system state
 
+${BOLD}Interactive:${RESET}
+  mac                                          Open interactive TUI
+
 ${BOLD}Package management:${RESET}
   mac add <name> [--cask|--formula|--vscode]   Install and track
   mac remove <name>                            Uninstall and untrack
@@ -287,18 +290,35 @@ cmd_push() {
   git push 2>&1
 }
 
+# ── TUI ─────────────────────────────────────────────────────────────────────
+launch_tui() {
+  local tui_dir="$DOTFILES/scripts/tui"
+
+  if ! command -v node &>/dev/null; then
+    printf "${RED}node not found. Run 'mac sync' first to install Node via mise.${RESET}\n"
+    exit 1
+  fi
+
+  if [[ ! -d "$tui_dir/node_modules" ]]; then
+    printf "${BLUE}Installing TUI dependencies...${RESET}\n"
+    (cd "$tui_dir" && npm install --production --silent 2>/dev/null)
+  fi
+
+  exec node "$tui_dir/src/app.js"
+}
+
 # ── Main ────────────────────────────────────────────────────────────────────
-[[ $# -eq 0 ]] && usage
+[[ $# -eq 0 ]] && launch_tui
 
 case "$1" in
-  add)      shift; cmd_add "$@" ;;
-  remove)   shift; cmd_remove "$@" ;;
-  list)     cmd_list ;;
-  status)   cmd_status ;;
-  check)    exec "$DOTFILES/bootstrap.sh" --check ;;
-  sync)     exec "$DOTFILES/bootstrap.sh" ;;
-  lock)     update_lock ;;
-  update)   cmd_update ;;
+  add)        shift; cmd_add "$@" ;;
+  remove)     shift; cmd_remove "$@" ;;
+  list)       cmd_list ;;
+  status)     cmd_status ;;
+  check)      exec "$DOTFILES/bootstrap.sh" --check ;;
+  sync)       exec "$DOTFILES/bootstrap.sh" ;;
+  lock)       update_lock ;;
+  update)     cmd_update ;;
   cleanup)    cmd_cleanup ;;
   push)       cmd_push ;;
   disk)       command -v mo &>/dev/null && exec mo analyze || printf "${RED}mole (mo) not installed${RESET}\n" ;;

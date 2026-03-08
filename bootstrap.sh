@@ -520,6 +520,39 @@ step_mise() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 6b. TUI dependencies
+# Ensures the interactive TUI has its Node.js dependencies installed.
+# Runs after mise so that Node/npm are available.
+# ─────────────────────────────────────────────────────────────────────────────
+step_tui_deps() {
+  section "TUI Dependencies"
+
+  local tui_dir="$DOTFILES/scripts/tui"
+
+  if [[ ! -f "$tui_dir/package.json" ]]; then
+    info "No TUI package.json — skipping"
+    return
+  fi
+
+  if [[ -d "$tui_dir/node_modules" ]]; then
+    ok "TUI dependencies installed"
+    return
+  fi
+
+  if ! command -v npm &>/dev/null; then
+    record_warning "npm not available — TUI deps not installed (install Node via mise first)"
+    return
+  fi
+
+  record_warning "TUI dependencies not installed"
+  if $CHECK_ONLY; then return; fi
+
+  info "Running npm install..."
+  (cd "$tui_dir" && npm install --production --silent)
+  record_applied "TUI dependencies installed"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 7. Shell configuration
 # Verifies .zshenv (PATH dedup + shims) and .zshrc (mise activate + starship).
 # Does not touch Kiro CLI or OrbStack managed blocks.
@@ -1070,6 +1103,7 @@ main() {
   step_dotfiles
   step_git_identity
   step_mise
+  step_tui_deps
   step_shell
   step_macos_defaults
   step_external_ssd
