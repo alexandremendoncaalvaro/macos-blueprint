@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-07T03:14:54Z",
+  "generated": "2026-03-08T16:02:05Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -16,6 +16,7 @@
     "libunistring": "1.4.1",
     "libvpx": "1.16.0",
     "mise": "2026.3.3",
+    "mole": "1.30.0",
     "oniguruma": "6.9.10",
     "openssl@3": "3.6.1",
     "opus": "1.6.1",
