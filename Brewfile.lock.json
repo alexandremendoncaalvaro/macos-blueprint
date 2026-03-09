@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-09T03:17:23Z",
+  "generated": "2026-03-09T03:19:17Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -26,6 +26,7 @@
     "openssl@3": "3.6.1",
     "opus": "1.6.1",
     "pcre2": "10.47_1",
+    "pkgconf": "2.5.1",
     "python@3.14": "3.14.3_1",
     "readline": "8.3.3",
     "ripgrep": "15.1.0",
