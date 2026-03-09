@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-09T03:16:27Z",
+  "generated": "2026-03-09T03:16:34Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -17,6 +17,7 @@
     "libvpx": "1.16.0",
     "mise": "2026.3.5",
     "mole": "1.30.0",
+    "ninja": "1.13.2",
     "oniguruma": "6.9.10",
     "openssl@3": "3.6.1",
     "opus": "1.6.1",
