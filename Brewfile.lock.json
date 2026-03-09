@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-08T17:10:42Z",
+  "generated": "2026-03-09T03:16:27Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -36,6 +36,7 @@
     "blip": "1.1.15,20260112093151",
     "chatgpt": "1.2026.041,1771039076",
     "claude-code": "2.1.71",
+    "cmake-app": "4.2.3",
     "codex-app": "26.217.1959",
     "copilot-cli": "1.0.2",
     "font-meslo-lg-nerd-font": "3.4.0",
