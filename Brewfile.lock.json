@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-10T20:59:59Z",
+  "generated": "2026-03-10T21:00:32Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -50,6 +50,7 @@
     "antigravity": "1.18.3,4739469533380608",
     "blip": "1.1.15,20260112093151",
     "chatgpt": "1.2026.041,1771039076",
+    "claude": "1.1.5749,ecf3d94e6eb8c8af9caed33a16c58e199abe2aec",
     "cmake-app": "4.2.3",
     "codex-app": "26.217.1959",
     "copilot-cli": "1.0.2",
