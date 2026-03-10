@@ -34,7 +34,6 @@ cask "logi-options+"
 cask "rive"
 cask "codex-app"
 cask "copilot-cli"
-cask "claude-code"
 cask "tailscale-app"                # VPN / mesh networking
 
 # VS Code extensions
