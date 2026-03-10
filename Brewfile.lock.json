@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-10T21:00:32Z",
+  "generated": "2026-03-10T23:56:12Z",
   "formulae": {
     "bat": "0.26.1",
     "ca-certificates": "2025-12-02",
@@ -48,6 +48,7 @@
   },
   "casks": {
     "antigravity": "1.18.3,4739469533380608",
+    "blender": "5.0.1",
     "blip": "1.1.15,20260112093151",
     "chatgpt": "1.2026.041,1771039076",
     "claude": "1.1.5749,ecf3d94e6eb8c8af9caed33a16c58e199abe2aec",
