@@ -20,6 +20,10 @@ DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BREWFILE="$DOTFILES/Brewfile"
 LOCKSCRIPT="$DOTFILES/scripts/brew-lock.py"
 
+# Machine-local config (per-machine settings, not versioned)
+DOTFILES_EXTERNAL_SSD=""
+[[ -f "$HOME/.dotfiles.local" ]] && source "$HOME/.dotfiles.local"
+
 RED='\033[1;31m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'
 BLUE='\033[1;34m'; BOLD='\033[1m'; RESET='\033[0m'
 
@@ -210,8 +214,12 @@ cmd_status() {
   # Disk
   local internal external
   internal=$(df -h / | awk 'NR==2{print $4}')
-  external=$(df -h /Volumes/MacMini 2>/dev/null | awk 'NR==2{print $4}') || external="not mounted"
-  printf "  ${BLUE}Disk:${RESET}     Internal %s free | MacMini SSD %s free\n" "$internal" "$external"
+  if [[ -n "${DOTFILES_EXTERNAL_SSD:-}" && -d "$DOTFILES_EXTERNAL_SSD" ]]; then
+    external=$(df -h "$DOTFILES_EXTERNAL_SSD" 2>/dev/null | awk 'NR==2{print $4}') || external="not mounted"
+    printf "  ${BLUE}Disk:${RESET}     Internal %s free | External SSD %s free\n" "$internal" "$external"
+  else
+    printf "  ${BLUE}Disk:${RESET}     Internal %s free | External SSD: not configured\n" "$internal"
+  fi
 
   # Brew
   local outdated
@@ -272,8 +280,8 @@ cmd_cleanup() {
   fi
 
   # Xcode DerivedData
-  local dd="/Volumes/MacMini/DerivedData"
-  if [[ -d "$dd" ]]; then
+  local dd="${DOTFILES_EXTERNAL_SSD:+$DOTFILES_EXTERNAL_SSD/DerivedData}"
+  if [[ -n "$dd" && -d "$dd" ]]; then
     local dd_size
     dd_size=$(du -sh "$dd" 2>/dev/null | cut -f1)
     printf "  DerivedData: %s — " "$dd_size"

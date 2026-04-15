@@ -8,11 +8,15 @@ export PATH="$HOME/.local/share/mise/shims:$PATH"
 export PATH="$HOME/dotfiles/scripts:$PATH"
 alias mac='dotfiles.sh'
 
-# External SSD (MacMini) — redirect caches and tool data to external storage
-# These exports are safe even if the volume is not mounted; tools fall back gracefully.
-export HOMEBREW_CACHE=/Volumes/MacMini/Homebrew/Cache
-export PLAYWRIGHT_BROWSERS_PATH=/Volumes/MacMini/playwright
-export MISE_DATA_DIR=/Volumes/MacMini/mise
-export RUSTUP_HOME=/Volumes/MacMini/rustup
-export CARGO_HOME=/Volumes/MacMini/cargo
-export npm_config_cache=/Volumes/MacMini/npm-cache
+# External SSD — redirect caches and tool data to external storage.
+# Path is configured per machine in ~/.dotfiles.local (not versioned).
+# Vars are only exported when the volume is actually mounted.
+[[ -f "$HOME/.dotfiles.local" ]] && source "$HOME/.dotfiles.local"
+if [[ -n "${DOTFILES_EXTERNAL_SSD:-}" && -d "$DOTFILES_EXTERNAL_SSD" ]]; then
+  export HOMEBREW_CACHE="$DOTFILES_EXTERNAL_SSD/Homebrew/Cache"
+  export PLAYWRIGHT_BROWSERS_PATH="$DOTFILES_EXTERNAL_SSD/playwright"
+  export MISE_DATA_DIR="$DOTFILES_EXTERNAL_SSD/mise"
+  export RUSTUP_HOME="$DOTFILES_EXTERNAL_SSD/rustup"
+  export CARGO_HOME="$DOTFILES_EXTERNAL_SSD/cargo"
+  export npm_config_cache="$DOTFILES_EXTERNAL_SSD/npm-cache"
+fi

@@ -15,6 +15,12 @@ DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK_ONLY=false
 [[ "${1:-}" == "--check" || "${1:-}" == "-c" ]] && CHECK_ONLY=true
 
+# ── Machine-local config ──────────────────────────────────────────────────────
+# ~/.dotfiles.local is not versioned — stores per-machine settings.
+LOCAL_CONFIG="$HOME/.dotfiles.local"
+DOTFILES_EXTERNAL_SSD=""
+[[ -f "$LOCAL_CONFIG" ]] && source "$LOCAL_CONFIG"
+
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[1;31m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'
 BLUE='\033[1;34m'; GREY='\033[0;90m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -113,25 +119,49 @@ step_brewbundle() {
     return
   fi
 
-  # Show exactly what is missing (--verbose lists each missing item).
-  local missing_output
-  missing_output="$(brew bundle check --file="$brewfile" --verbose 2>&1 | grep -i "not installed\|missing" || true)"
-  if [[ -n "$missing_output" ]]; then
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && record_warning "$line"
-    done <<< "$missing_output"
-  else
-    record_warning "Some packages not satisfied (run brew bundle check --verbose for details)"
+  if $CHECK_ONLY; then
+    # In check mode, show exactly what is missing.
+    local missing_output
+    missing_output="$(brew bundle check --file="$brewfile" --verbose 2>&1 | grep -i "not installed\|missing" || true)"
+    if [[ -n "$missing_output" ]]; then
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && record_warning "$line"
+      done <<< "$missing_output"
+    else
+      record_warning "Some packages not satisfied (run brew bundle check --verbose for details)"
+    fi
+    return
   fi
-
-  if $CHECK_ONLY; then return; fi
 
   info "Running brew bundle install..."
-  if brew bundle install --file="$brewfile"; then
+  local bundle_output
+  bundle_output="$(brew bundle install --file="$brewfile" 2>&1)" && {
+    echo "$bundle_output"
     record_applied "brew bundle: all packages installed"
-  else
-    record_warning "brew bundle: some packages failed (check output above)"
-  fi
+  } || {
+    echo "$bundle_output"
+    # Surface targeted errors instead of a generic failure message.
+    local swiftlint_failed=false
+    echo "$bundle_output" | grep -q "Installing swiftlint has failed" && swiftlint_failed=true
+
+    if $swiftlint_failed && ! xcode-select -p 2>/dev/null | grep -q "Xcode.app"; then
+      record_warning "swiftlint requires Xcode.app (not just CLI Tools) — install from App Store, then re-run"
+    fi
+
+    # Report any other failures.
+    local other_failures
+    other_failures="$(echo "$bundle_output" | grep -E "^Error:|has failed!" | grep -v swiftlint || true)"
+    if [[ -n "$other_failures" ]]; then
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && record_warning "brew bundle: $line"
+      done <<< "$other_failures"
+    fi
+
+    # If swiftlint was the only failure, don't show the generic message.
+    if ! $swiftlint_failed || [[ -n "$other_failures" ]]; then
+      record_warning "brew bundle: some packages failed (see output above)"
+    fi
+  }
 
   # Update lockfile with exact installed versions.
   local lockscript="$DOTFILES/scripts/brew-lock.py"
@@ -410,6 +440,28 @@ step_git_identity() {
     record_applied "~/.gitconfig.local: user.email set"
   fi
 
+  # If email still missing after auto-resolve, ask interactively.
+  if ! git_config_file_has_key "$local_cfg" user.email && [[ -t 0 && -t 1 ]]; then
+    printf "  Enter git user email (leave empty to skip): "
+    local prompted_email
+    read -r prompted_email
+    if [[ -n "$prompted_email" ]]; then
+      git config --file "$local_cfg" user.email "$prompted_email"
+      record_applied "~/.gitconfig.local: user.email set"
+    fi
+  fi
+
+  # If name still missing, ask interactively.
+  if ! git_config_file_has_key "$local_cfg" user.name && [[ -t 0 && -t 1 ]]; then
+    printf "  Enter git user name (leave empty to skip): "
+    local prompted_name
+    read -r prompted_name
+    if [[ -n "$prompted_name" ]]; then
+      git config --file "$local_cfg" user.name "$prompted_name"
+      record_applied "~/.gitconfig.local: user.name set"
+    fi
+  fi
+
   local need_name_placeholder="no"
   local need_email_placeholder="no"
   git_config_file_has_key "$local_cfg" user.name || need_name_placeholder="yes"
@@ -514,6 +566,11 @@ step_mise() {
   fi
 
   # Apply: mise install is a no-op if everything is already installed.
+  local missing_tools
+  missing_tools="$(mise ls --missing 2>/dev/null | awk '{print $1}' | wc -l | tr -d ' ')"
+  if [[ "$missing_tools" -gt 0 ]]; then
+    info "Installing $missing_tools tool(s) — this may take several minutes on first run..."
+  fi
   info "Running mise install..."
   mise install
   record_applied "mise install"
@@ -544,8 +601,10 @@ step_tui_deps() {
     return
   fi
 
-  record_warning "TUI dependencies not installed"
-  if $CHECK_ONLY; then return; fi
+  if $CHECK_ONLY; then
+    record_warning "TUI dependencies not installed"
+    return
+  fi
 
   info "Running npm install..."
   (cd "$tui_dir" && npm install --production --silent)
@@ -577,10 +636,22 @@ step_shell() {
     record_error ".zshenv missing — PATH dedup and mise shims not configured"
   fi
 
-  # .zshrc — managed by Kiro CLI, but must contain these two lines.
+  # .zshrc — must contain mise activate, starship init, and fzf integration.
+  # If missing, create a minimal baseline (other tools like Kiro can append to it later).
   if [[ ! -f "$zshrc" ]]; then
-    record_warning ".zshrc not found — will be created by Kiro CLI on install"
-    return
+    if $CHECK_ONLY; then
+      record_warning ".zshrc not found — run bootstrap to create a minimal baseline"
+      return
+    fi
+    info "Creating minimal ~/.zshrc..."
+    cat > "$zshrc" <<'ZSHRC'
+# ~/.zshrc — baseline created by bootstrap.sh
+# Other tools (Kiro, OrbStack, etc.) may append their own blocks below.
+
+eval "$(mise activate zsh)"
+eval "$(starship init zsh)"
+ZSHRC
+    record_applied "~/.zshrc created (minimal baseline)"
   fi
 
   local required_lines=(
@@ -595,8 +666,10 @@ step_shell() {
     if grep -qF "$pattern" "$zshrc" 2>/dev/null; then
       ok ".zshrc: $label"
     else
-      record_warning ".zshrc missing: $label"
-      if $CHECK_ONLY; then continue; fi
+      if $CHECK_ONLY; then
+        record_warning ".zshrc missing: $label"
+        continue
+      fi
       printf '\n%s\n' "$pattern" >> "$zshrc"
       record_applied ".zshrc: $label added"
     fi
@@ -609,8 +682,9 @@ step_shell() {
     if grep -qF "$fzf_line" "$zshrc" 2>/dev/null; then
       ok ".zshrc: fzf shell integration"
     else
-      record_warning ".zshrc missing: fzf shell integration"
-      if ! $CHECK_ONLY; then
+      if $CHECK_ONLY; then
+        record_warning ".zshrc missing: fzf shell integration"
+      else
         printf '\n%s\n' "$fzf_line" >> "$zshrc"
         record_applied ".zshrc: fzf shell integration added"
       fi
@@ -700,9 +774,53 @@ step_macos_defaults() {
 # per-tool storage paths. Skipped entirely when the volume is not mounted.
 # ─────────────────────────────────────────────────────────────────────────────
 step_external_ssd() {
-  section "External SSD (MacMini)"
+  section "External SSD"
 
-  local volume="/Volumes/MacMini"
+  # ── Resolve configured SSD path ────────────────────────────────────────────
+  # Prefer env var set by ~/.dotfiles.local; fall back to interactive prompt.
+  local volume="${DOTFILES_EXTERNAL_SSD:-}"
+
+  if [[ -z "$volume" ]]; then
+    if ! $CHECK_ONLY && [[ -t 0 && -t 1 ]]; then
+      # Suggest available external volumes (everything under /Volumes except Macintosh HD)
+      local available_vols=()
+      while IFS= read -r v; do
+        [[ "$v" != "/" && "$v" != "/System/Volumes"* ]] && available_vols+=("$v")
+      done < <(ls -d /Volumes/*/ 2>/dev/null | sed 's|/$||')
+
+      info "No external SSD configured (~/.dotfiles.local is missing DOTFILES_EXTERNAL_SSD)."
+      if [[ ${#available_vols[@]} -gt 0 ]]; then
+        info "Available volumes: ${available_vols[*]}"
+      fi
+      printf "  Enter external SSD mount path (leave empty to skip): "
+      local user_input
+      read -r user_input
+      user_input="${user_input%/}"  # strip trailing slash
+
+      if [[ -n "$user_input" ]]; then
+        volume="$user_input"
+        DOTFILES_EXTERNAL_SSD="$volume"
+        # Persist to local config
+        if [[ -f "$LOCAL_CONFIG" ]]; then
+          # Update or append
+          if grep -q "^DOTFILES_EXTERNAL_SSD=" "$LOCAL_CONFIG" 2>/dev/null; then
+            sed -i '' "s|^DOTFILES_EXTERNAL_SSD=.*|DOTFILES_EXTERNAL_SSD=$volume|" "$LOCAL_CONFIG"
+          else
+            echo "DOTFILES_EXTERNAL_SSD=$volume" >> "$LOCAL_CONFIG"
+          fi
+        else
+          printf "# Machine-local dotfiles config — do not commit this file\nDOTFILES_EXTERNAL_SSD=%s\n" "$volume" > "$LOCAL_CONFIG"
+        fi
+        record_applied "External SSD configured: $volume (saved to ~/.dotfiles.local)"
+      else
+        info "Skipping external SSD — no path configured"
+        return
+      fi
+    else
+      info "No external SSD configured — skipping (set DOTFILES_EXTERNAL_SSD in ~/.dotfiles.local to enable)"
+      return
+    fi
+  fi
 
   if [[ ! -d "$volume" ]]; then
     info "Volume $volume not mounted — skipping"
