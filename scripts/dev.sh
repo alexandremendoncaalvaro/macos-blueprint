@@ -41,12 +41,13 @@ ${BOLD}Usage:${RESET}
   mac dev stacks                          List available stacks
   mac dev flavors <stack>                 List flavors for a stack
 
-${BOLD}Stacks:${RESET}    python | node | go | rust | csharp | java
+${BOLD}Stacks:${RESET}    python | node | go | rust | cpp | csharp | java
 ${BOLD}Examples:${RESET}
   mac dev create api --python --fastapi
   mac dev create ml  --python --notebooks --pytorch
   mac dev create web --node --vite-ts
   mac dev create cli --rust
+  mac dev create rt  --cpp
 EOF
 }
 
@@ -91,7 +92,7 @@ dev_create() {
   done
 
   [[ -z "$name" ]]  && { fail "name required";   usage; exit 1; }
-  [[ -z "$stack" ]] && { fail "stack required (--python|--node|--go|--rust|--csharp|--java)"; exit 1; }
+  [[ -z "$stack" ]] && { fail "stack required (--python|--node|--go|--rust|--cpp|--csharp|--java)"; exit 1; }
 
   target_dir="${target_dir:-$PWD/$name}"
   mkdir -p "$target_dir"

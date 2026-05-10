@@ -6,7 +6,7 @@ import { DOTFILES } from './config.js';
 
 const DEV = `"${DOTFILES}/scripts/dev.sh"`;
 
-const STACKS = ['python', 'node', 'go', 'rust', 'csharp', 'java'];
+const STACKS = ['python', 'node', 'go', 'rust', 'cpp', 'csharp', 'java'];
 
 export async function devMenu() {
   while (true) {

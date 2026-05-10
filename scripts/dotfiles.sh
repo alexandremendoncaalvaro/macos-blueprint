@@ -58,6 +58,7 @@ ${BOLD}Devcontainers:${RESET}
   mac dev open [path]                          Open project in VSCode
   mac dev doctor                               Diagnose host auth + tools
   mac dev stacks | flavors <stack>             Discover what's available
+  Stacks: python | node | go | rust | cpp | csharp | java
 EOF
   exit 1
 }
