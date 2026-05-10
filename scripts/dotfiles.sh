@@ -47,6 +47,13 @@ ${BOLD}System:${RESET}
 ${BOLD}Repo:${RESET}
   mac lock                                     Regenerate Brewfile.lock.json
   mac push                                     Push dotfiles to remote
+
+${BOLD}Devcontainers:${RESET}
+  mac dev create <name> --<stack> [--<flavor>...]
+  mac dev list                                 List devcontainers in projects
+  mac dev open [path]                          Open project in VSCode
+  mac dev doctor                               Diagnose host auth + tools
+  mac dev stacks | flavors <stack>             Discover what's available
 EOF
   exit 1
 }
@@ -323,5 +330,6 @@ case "$1" in
   push)       cmd_push ;;
   disk)       command -v mo &>/dev/null && exec mo analyze || printf "${RED}mole (mo) not installed${RESET}\n" ;;
   uninstall)  shift; command -v mo &>/dev/null && exec mo uninstall "$@" || printf "${RED}mole (mo) not installed${RESET}\n" ;;
+  dev)        shift; exec "$DOTFILES/scripts/dev.sh" "$@" ;;
   *)          usage ;;
 esac

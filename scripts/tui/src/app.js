@@ -6,6 +6,7 @@ import { showQuickStatus } from './status.js';
 import { packagesMenu } from './packages.js';
 import { cleanupMenu } from './cleanup.js';
 import { updateAll } from './update.js';
+import { devMenu } from './dev.js';
 import { run, runLive, hasBin } from './exec.js';
 import { DOTFILES } from './config.js';
 
@@ -20,6 +21,7 @@ async function main() {
       message: 'What would you like to do?',
       options: [
         { value: 'packages',  label: 'Packages',      hint: 'add, remove, list' },
+        { value: 'dev',       label: 'Devcontainers', hint: 'create, list, open, doctor' },
         { value: 'update',    label: 'Update',         hint: 'upgrade everything' },
         { value: 'cleanup',   label: 'Cleanup',        hint: 'free disk space' },
         { value: 'disk',      label: 'Disk',           hint: 'analyze usage' },
@@ -36,6 +38,10 @@ async function main() {
     switch (action) {
       case 'packages':
         await packagesMenu();
+        break;
+
+      case 'dev':
+        await devMenu();
         break;
 
       case 'update':
