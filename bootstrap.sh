@@ -510,6 +510,98 @@ step_git_identity() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 5b. SSH — agent + github host config
+# Ensures ~/.ssh/config has an explicit Host github.com block with
+# AddKeysToAgent so that opening a devcontainer (which forwards
+# SSH_AUTH_SOCK from the host) finds the key already loaded. Without
+# this, every reboot leaves the agent empty and git over SSH inside
+# containers fails.
+#
+# Does NOT generate a key — only loads an existing one. Stays idempotent.
+# ─────────────────────────────────────────────────────────────────────────────
+step_ssh() {
+  section "SSH"
+
+  local ssh_dir="$HOME/.ssh"
+  local cfg="$ssh_dir/config"
+  local key=""
+
+  # Locate first available key in preference order.
+  for candidate in id_ed25519 id_rsa; do
+    if [[ -f "$ssh_dir/$candidate" ]]; then
+      key="$ssh_dir/$candidate"
+      break
+    fi
+  done
+
+  if [[ ! -d "$ssh_dir" ]]; then
+    record_warning "$ssh_dir missing"
+    if $CHECK_ONLY; then return; fi
+    mkdir -p "$ssh_dir"
+    chmod 700 "$ssh_dir"
+    record_applied "$ssh_dir created (mode 700)"
+  fi
+
+  if [[ -z "$key" ]]; then
+    record_warning "no SSH key found in $ssh_dir (id_ed25519, id_rsa)"
+    info "Generate one with: ssh-keygen -t ed25519 -C \"<email>\""
+    info "Then upload: gh ssh-key add ~/.ssh/id_ed25519.pub --title \"$(hostname -s)\""
+  else
+    ok "SSH key present: $(basename "$key")"
+  fi
+
+  # ── ~/.ssh/config: ensure github host block exists ───────────────────────
+  if [[ ! -f "$cfg" ]]; then
+    if $CHECK_ONLY; then
+      record_warning "$cfg missing"
+    else
+      : > "$cfg"
+      chmod 600 "$cfg"
+      record_applied "$cfg created (mode 600)"
+    fi
+  fi
+
+  if [[ -f "$cfg" ]] && grep -qE '^[[:space:]]*Host[[:space:]]+github\.com([[:space:]]|$)' "$cfg"; then
+    ok "~/.ssh/config has Host github.com block"
+  else
+    record_warning "~/.ssh/config missing Host github.com block"
+    if ! $CHECK_ONLY; then
+      local key_path="${key:-$HOME/.ssh/id_ed25519}"
+      {
+        printf '\n# Added by dotfiles bootstrap — required for devcontainer SSH agent forwarding.\n'
+        printf 'Host github.com\n'
+        printf '  AddKeysToAgent yes\n'
+        printf '  UseKeychain yes\n'
+        printf '  IdentityFile %s\n' "$key_path"
+        printf '  IdentitiesOnly yes\n'
+      } >> "$cfg"
+      chmod 600 "$cfg"
+      record_applied "~/.ssh/config: Host github.com block added"
+    fi
+  fi
+
+  # ── ssh-agent: load key if not already loaded ────────────────────────────
+  if [[ -z "$key" ]]; then
+    return
+  fi
+
+  if ssh-add -l 2>/dev/null | grep -q "$(ssh-keygen -lf "$key" 2>/dev/null | awk '{print $2}')"; then
+    ok "SSH key already loaded in agent"
+    return
+  fi
+
+  record_warning "SSH key not loaded in agent"
+  if $CHECK_ONLY; then return; fi
+
+  if ssh-add --apple-use-keychain "$key" 2>/dev/null \
+       || ssh-add "$key" 2>/dev/null; then
+    record_applied "SSH key loaded into agent ($(basename "$key"))"
+  else
+    record_warning "ssh-add failed — load manually: ssh-add $key"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 6. mise — toolchain manager
 # Checks installation, shims on PATH, and runs `mise install` if any
 # configured tool is missing. `mise install` is idempotent.
@@ -1220,6 +1312,7 @@ main() {
   step_brewbundle
   step_dotfiles
   step_git_identity
+  step_ssh
   step_mise
   step_tui_deps
   step_shell
