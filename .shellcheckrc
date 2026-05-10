@@ -1,0 +1,29 @@
+# Project-wide shellcheck config.
+#
+# Disables below are rationale-driven, not blanket. New scripts inherit them;
+# add per-line `# shellcheck disable=` only when overriding *into* a check.
+
+# SC2088 — tilde in quoted string does not expand.
+# We use "~/foo" intentionally in user-facing display strings (warnings,
+# help text, prompts). Real path resolution always uses "$HOME/foo".
+disable=SC2088
+
+# SC2059 — printf format string contains variables.
+# All such cases here interpolate ANSI color sequences ($BOLD/$RED/$RESET)
+# defined as constants. The format-string injection class doesn't apply.
+disable=SC2059
+
+# SC2016 — expressions in single quotes don't expand.
+# Used to embed literal devcontainer.json placeholders like
+# '${localEnv:HOME}' that must reach the JSON file un-expanded.
+disable=SC2016
+
+# SC2010 / SC2011 — ls | grep / ls | xargs.
+# Inputs are template filenames we control; never user-supplied paths.
+disable=SC2010
+disable=SC2011
+
+# SC1083 — literal braces.
+# Triggered by git's `@{u}` upstream syntax inside command substitution;
+# quoting it would change meaning.
+disable=SC1083

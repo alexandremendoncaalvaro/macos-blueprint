@@ -28,6 +28,7 @@ LOCKSCRIPT="$DOTFILES/scripts/brew-lock.py"
 DOTFILES_EXTERNAL_SSD=""
 if [[ -f "$HOME/.dotfiles.local" ]]; then
   set +e
+  # shellcheck disable=SC1091
   source "$HOME/.dotfiles.local" 2>/dev/null
   src_status=$?
   set -e

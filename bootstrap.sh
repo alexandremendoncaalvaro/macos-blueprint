@@ -26,6 +26,7 @@ DOTFILES_EXTERNAL_SSD=""
 # source call and report the failure ourselves.
 if [[ -f "$LOCAL_CONFIG" ]]; then
   set +e
+  # shellcheck disable=SC1090
   source "$LOCAL_CONFIG" 2>/dev/null
   src_status=$?
   set -e
@@ -36,7 +37,7 @@ fi
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[1;31m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'
-BLUE='\033[1;34m'; GREY='\033[0;90m'; BOLD='\033[1m'; RESET='\033[0m'
+BLUE='\033[1;34m'; BOLD='\033[1m'; RESET='\033[0m'
 
 ok()      { printf "${GREEN}  ✓${RESET}  %s\n" "$*"; }
 fail()    { printf "${RED}  ✗${RESET}  %s\n" "$*"; }
@@ -148,6 +149,11 @@ step_brewbundle() {
 
   info "Running brew bundle install..."
   local bundle_output
+  # The `&& { ... } || { ... }` pattern can technically run the second block
+  # when the first succeeds but contains a failing command. Acceptable here:
+  # the success block only runs `record_applied` (printf-only, never fails)
+  # before we'd ever reach the failure block.
+  # shellcheck disable=SC2015
   bundle_output="$(brew bundle install --file="$brewfile" 2>&1)" && {
     echo "$bundle_output"
     record_applied "brew bundle: all packages installed"
@@ -889,6 +895,8 @@ step_external_ssd() {
     if ! $CHECK_ONLY && [[ -t 0 && -t 1 ]]; then
       # Suggest available external volumes (everything under /Volumes except Macintosh HD)
       local available_vols=()
+      # /Volumes/* names are macOS volume names (no newlines, controlled by user).
+      # shellcheck disable=SC2012
       while IFS= read -r v; do
         [[ "$v" != "/" && "$v" != "/System/Volumes"* ]] && available_vols+=("$v")
       done < <(ls -d /Volumes/*/ 2>/dev/null | sed 's|/$||')

@@ -445,7 +445,41 @@ dev_validate() {
     ok "build.dockerfile: ${build_dockerfile}"
   fi
 
-  # ── 3. Mount source paths exist on host ─────────────────────────────────
+  # ── 3. Field types (catches the realistic "edited by hand" typos) ──────
+  # We do not vendor the official multi-file devcontainer JSON schema (it
+  # spans 4 files with cross-repo $refs). Instead, jq spot-checks each
+  # field people are most likely to typo when editing by hand.
+  _check_type() {
+    local jq_expr="$1" message="$2"
+    if echo "$stripped" | jq -e "$jq_expr" >/dev/null 2>&1; then
+      fail "$message"
+      errors=$((errors + 1))
+    fi
+  }
+
+  local field_errors_before="$errors"
+  _check_type 'has("forwardPorts") and (.forwardPorts | type != "array" or any(type != "number"))' \
+              'forwardPorts must be an array of integers'
+  _check_type 'has("mounts") and (.mounts | type != "array" or any(type != "string"))' \
+              'mounts must be an array of strings'
+  _check_type 'has("features") and (.features | type != "object")' \
+              'features must be an object'
+  _check_type 'has("containerEnv") and (.containerEnv | type != "object")' \
+              'containerEnv must be an object'
+  _check_type 'has("remoteUser") and (.remoteUser | type != "string")' \
+              'remoteUser must be a string'
+  _check_type '(.customizations.vscode.extensions // null) != null and (.customizations.vscode.extensions | type != "array" or any(type != "string"))' \
+              'customizations.vscode.extensions must be an array of strings'
+  _check_type '(.customizations.vscode.settings // null) != null and (.customizations.vscode.settings | type != "object")' \
+              'customizations.vscode.settings must be an object'
+  _check_type 'has("postCreateCommand") and (.postCreateCommand | type as $t | $t != "string" and $t != "array")' \
+              'postCreateCommand must be a string or array'
+
+  if (( errors == field_errors_before )); then
+    ok "field types"
+  fi
+
+  # ── 4. Mount source paths exist on host ─────────────────────────────────
   while IFS= read -r mount; do
     [[ -z "$mount" ]] && continue
     # Extract source=... value from the comma-separated mount string.
@@ -568,6 +602,10 @@ dev_diff() {
 
   local tmp
   tmp="$(mktemp -d)"
+  # Single-quoted trap so $tmp resolves at RETURN time (not now); harmless
+  # here since $tmp doesn't change, but keeps shellcheck happy and matches
+  # the documented best practice.
+  # shellcheck disable=SC2064
   trap "rm -rf '$tmp'" RETURN
 
   if (( ${#flavor_args[@]} > 0 )); then

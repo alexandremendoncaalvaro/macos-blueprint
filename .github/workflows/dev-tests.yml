@@ -4,25 +4,43 @@ on:
   push:
     branches: [main]
     paths:
-      - "scripts/dev.sh"
-      - "scripts/dotfiles.sh"
+      - "bootstrap.sh"
+      - "scripts/**.sh"
       - "templates/devcontainers/**"
       - "tests/dev/**"
+      - ".shellcheckrc"
       - ".github/workflows/dev-tests.yml"
   pull_request:
     paths:
-      - "scripts/dev.sh"
-      - "scripts/dotfiles.sh"
+      - "bootstrap.sh"
+      - "scripts/**.sh"
       - "templates/devcontainers/**"
       - "tests/dev/**"
+      - ".shellcheckrc"
       - ".github/workflows/dev-tests.yml"
   workflow_dispatch:
 
 jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+      - name: Lint shell scripts
+        run: |
+          shellcheck -x \
+            bootstrap.sh \
+            scripts/*.sh \
+            templates/devcontainers/_base/*.sh \
+            templates/devcontainers/_base/post-create.d/*.sh \
+            templates/devcontainers/stacks/*.sh \
+            templates/devcontainers/flavors/*.sh
+
   bats:
     runs-on: macos-latest
     timeout-minutes: 5
-
     steps:
       - uses: actions/checkout@v4
 
@@ -32,7 +50,7 @@ jobs:
       - name: Run mac dev test suite
         run: bats tests/dev/
 
-      - name: Snapshot drift check
+      - name: Snapshot drift hint
         if: failure()
         run: |
           echo "::warning ::If snapshots drifted intentionally, regenerate locally:"
