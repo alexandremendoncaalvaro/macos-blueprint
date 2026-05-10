@@ -20,6 +20,8 @@ Keep a Mac development environment reproducible from versioned config in this re
 - Offload user folders and dev tool data to external SSD (`/Volumes/MacMini`).
 - Configure `sudo` Touch ID (`pam_tid`) when available.
 - Weekly drift detection with macOS notification.
+- Configure SSH agent + GitHub host block so devcontainers can forward `SSH_AUTH_SOCK`.
+- Generate per-project devcontainers (`mac dev`) from layered, tested templates.
 
 ## Quick start
 
@@ -77,6 +79,16 @@ mac uninstall [app]                          # remove app + leftover files (mole
 # Repo
 mac lock                                     # regenerate Brewfile.lock.json
 mac push                                     # push dotfiles to remote
+
+# Devcontainers
+mac dev create <name> --<stack> [--<flavor>...]   # new project from templates
+mac dev init   --<stack> [--<flavor>...]          # add devcontainer to existing project
+mac dev validate [path]                            # schema-ish + mounts + scripts checks
+mac dev diff [path]                                # drift vs current template
+mac dev upgrade [path]                             # regenerate from saved metadata
+mac dev rebuild | clean [path]                     # devcontainer rebuild / remove
+mac dev list | open | doctor | sync-ext            # discover / health
+mac dev stacks | flavors <stack> | test            # help / regression suite
 ```
 
 ### Mole integration
@@ -92,6 +104,72 @@ mac push                                     # push dotfiles to remote
 The TUI cleanup menu also offers `mo purge` (node_modules, target/, .build/) and `mo installer` (old .dmg/.pkg) as selectable options.
 
 > Touch ID for sudo is handled by bootstrap step 10, not duplicated from mole.
+
+## Devcontainers (`mac dev`)
+
+`mac dev` scaffolds VSCode devcontainers from layered templates so a new project gets a working container without copy-pasting JSON. Templates live in `templates/devcontainers/` and merge in three tiers:
+
+```
+templates/devcontainers/
+├── _base/                    # mounts, post-create runner, core extensions
+├── stacks/<stack>.json       # image + features + extensions for a language
+└── flavors/<stack>-<f>.json  # overlay (e.g. python-fastapi adds port 8000)
+```
+
+The merge uses `jq *` for objects and explicit dedup for the array fields (`mounts`, `forwardPorts`, `customizations.vscode.extensions`). Each layer can ship a sibling `.post.sh` that gets copied into `.devcontainer/post-create.d/` and run by `post-create.sh` in lexical order. `create` writes `.devcontainer/.mac-dev.json` so `upgrade`/`diff` can round-trip.
+
+### Stacks and flavors
+
+| Stack | Image | Flavors |
+|-------|-------|---------|
+| `python` | `mcr.microsoft.com/devcontainers/python:3-3.13-trixie` (uv pre-installed) | `vanilla`, `fastapi`, `notebooks`, `opencv`, `pytorch`, `tensorflow` |
+| `node` | `javascript-node:1-22-trixie` | `vite-ts`, `vite-js`, `astro`, `react` |
+| `cpp` | `cpp:1-debian-12` (cmake + ninja + vcpkg pre-baked) | — (CMake 3.28 + C++20 + Catch2 scaffold from `cpp.post.sh`) |
+| `go` | `go:1-1.23-trixie` | — |
+| `rust` | `rust:1-1-trixie` | — |
+| `csharp` | `dotnet:1-9.0-trixie` | — |
+| `java` | `java:1-21-trixie` (Maven + Gradle) | — |
+
+### Examples
+
+```bash
+# new FastAPI service
+mac dev create api --python --fastapi
+cd api && code .  # then: Cmd+Shift+P → Reopen in Container
+
+# ML notebook + pytorch in current dir
+cd existing-project && mac dev init --python --notebooks --pytorch
+
+# health check before sharing the project
+mac dev validate
+
+# templates updated upstream → preview, then apply
+mac dev diff
+mac dev upgrade
+```
+
+### Host bind mounts (auto-wired by `_base`)
+
+Each generated container mounts three host paths. Without these, the container fails to start:
+
+| Source | Purpose |
+|--------|---------|
+| `~/.gitconfig.local` | git identity (read-only) |
+| `~/.claude` | claude-code login persists across containers |
+| `~/.ssh` | SSH keys (copied + chmod inside `00-base.sh`); requires loaded ssh-agent on host (configured by step 5b) |
+
+`mac dev doctor` surfaces what's missing on the host before you build.
+
+### Tests + CI
+
+Bats covers the dev subsystem:
+
+```bash
+mac dev test              # runs tests/dev/ (66 tests, ~5s)
+UPDATE_SNAPSHOTS=1 mac dev test tests/dev/snapshot.bats   # accept new shape
+```
+
+`.github/workflows/dev-tests.yml` runs the suite on macOS and `shellcheck` on Linux for every push touching `bootstrap.sh`, `scripts/*.sh`, `templates/devcontainers/**`, or `tests/dev/**`. `.shellcheckrc` documents the rationale for each disabled rule.
 
 ## Detailed Reference
 
@@ -163,6 +241,16 @@ Packages are declared in `Brewfile` and enforced via `brew bundle`:
 - Bootstrap ensures `~/.gitconfig.local` exists.
 - Bootstrap ensures `user.name` and `user.email` are present in `~/.gitconfig.local` (or placeholders are added if values cannot be resolved automatically).
 - Bootstrap ensures `user.name` and `user.email` are removed from repo-managed `.gitconfig`.
+
+### 5b) SSH (devcontainer agent forwarding)
+
+VSCode Dev Containers forward `$SSH_AUTH_SOCK` from the host. If the host agent is empty (default after every reboot), git over SSH inside containers fails. This step:
+
+- Detects the first available key (`id_ed25519` preferred, `id_rsa` fallback). Does **not** generate one — surfaces a hint if absent.
+- Ensures `~/.ssh/config` has a `Host github.com` block with `AddKeysToAgent yes` / `UseKeychain yes` / `IdentityFile <key>` / `IdentitiesOnly yes`. After this, the agent populates lazily on first SSH after each reboot.
+- Loads the key into the running agent now via `ssh-add --apple-use-keychain`, falling back to plain `ssh-add`.
+
+All operations are idempotent and respect `--check`.
 
 ### 6) mise toolchains
 
@@ -248,31 +336,44 @@ A launchd agent runs `bootstrap.sh --check` every Monday at 10:00 and sends a ma
 
 ```
 dotfiles/
-├── bootstrap.sh                 # check+apply provisioner (11 steps)
+├── bootstrap.sh                 # check+apply provisioner (12 steps)
 ├── Brewfile                     # packages, casks, VS Code extensions
 ├── Brewfile.lock.json           # exact installed versions (auto-generated)
 ├── .zshenv                      # PATH dedup + mise shims + SSD env vars
 ├── .gitconfig                   # shared git defaults + includes ~/.gitconfig.local
 ├── .gitignore_global            # global ignore: .DS_Store, secrets, build artifacts
+├── .shellcheckrc                # rationale-driven shellcheck disables
 ├── .config/
 │   ├── mise/
 │   │   └── config.toml          # runtimes: node, python, go, rust, ruby, dotnet, java
 │   └── starship.toml            # prompt theme
-└── scripts/
-    ├── dotfiles.sh              # mac CLI entry point (alias: mac)
-    ├── brew-lock.py             # generates Brewfile.lock.json
-    ├── drift-check.sh           # weekly drift detection + notification
-    ├── com.dotfiles.drift-check.plist  # launchd agent definition
-    └── tui/                     # interactive terminal UI
-        ├── package.json         # @clack/prompts + picocolors
-        └── src/
-            ├── app.js           # main menu loop
-            ├── config.js        # paths (DOTFILES, BREWFILE)
-            ├── exec.js          # shell helpers (run, runAsync, runLive)
-            ├── status.js        # quick status dashboard
-            ├── packages.js      # add / remove / list sub-menu
-            ├── cleanup.js       # cleanup with mole integration
-            └── update.js        # upgrade all + lockfile + commit
+├── scripts/
+│   ├── dotfiles.sh              # mac CLI entry point (alias: mac)
+│   ├── dev.sh                   # `mac dev` subsystem (devcontainer scaffolding)
+│   ├── brew-lock.py             # generates Brewfile.lock.json
+│   ├── drift-check.sh           # weekly drift detection + notification
+│   ├── com.dotfiles.drift-check.plist  # launchd agent definition
+│   └── tui/                     # interactive terminal UI
+│       ├── package.json         # @clack/prompts + picocolors
+│       └── src/
+│           ├── app.js           # main menu loop
+│           ├── config.js        # paths (DOTFILES, BREWFILE)
+│           ├── exec.js          # shell helpers (run, runAsync, runLive)
+│           ├── status.js        # quick status dashboard
+│           ├── packages.js      # add / remove / list sub-menu
+│           ├── dev.js           # mac dev menu (create/init/validate/...)
+│           ├── cleanup.js       # cleanup with mole integration
+│           └── update.js        # upgrade all + lockfile + commit
+├── templates/
+│   └── devcontainers/           # layered devcontainer templates
+│       ├── _base/               # name placeholder, mounts, post-create runner
+│       ├── stacks/              # python|node|go|rust|cpp|csharp|java
+│       └── flavors/             # python-fastapi, node-vite-ts, ...
+├── tests/
+│   └── dev/                     # bats test suite (66 tests + JSON snapshots)
+└── .github/
+    └── workflows/
+        └── dev-tests.yml        # CI: shellcheck (ubuntu) + bats (macos)
 ```
 
 > **Note:** personal Git identity is stored in `~/.gitconfig.local` (non-versioned, machine-local).
