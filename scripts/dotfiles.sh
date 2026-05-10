@@ -65,11 +65,14 @@ ${BOLD}Repo:${RESET}
   mac push                                     Push dotfiles to remote
 
 ${BOLD}Devcontainers:${RESET}
-  mac dev create <name> --<stack> [--<flavor>...]
-  mac dev list                                 List devcontainers in projects
-  mac dev open [path]                          Open project in VSCode
-  mac dev doctor                               Diagnose host auth + tools
-  mac dev stacks | flavors <stack>             Discover what's available
+  mac dev create <name> --<stack> [--<flavor>...]   New project
+  mac dev init --<stack> [--<flavor>...]            Add to existing project
+  mac dev validate [path]                           Static + host-state checks
+  mac dev diff [path]                               Drift vs current template
+  mac dev upgrade [path]                            Regenerate from metadata
+  mac dev rebuild | clean [path]                    Rebuild / remove .devcontainer
+  mac dev list | open | doctor | sync-ext           Discover / health
+  mac dev stacks | flavors <stack> | test           Help / regression suite
   Stacks: python | node | go | rust | cpp | csharp | java
 EOF
   exit 1

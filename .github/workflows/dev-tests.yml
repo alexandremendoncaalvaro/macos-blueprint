@@ -1,0 +1,39 @@
+name: dev tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/dev.sh"
+      - "scripts/dotfiles.sh"
+      - "templates/devcontainers/**"
+      - "tests/dev/**"
+      - ".github/workflows/dev-tests.yml"
+  pull_request:
+    paths:
+      - "scripts/dev.sh"
+      - "scripts/dotfiles.sh"
+      - "templates/devcontainers/**"
+      - "tests/dev/**"
+      - ".github/workflows/dev-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  bats:
+    runs-on: macos-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats + jq
+        run: brew install bats-core jq
+
+      - name: Run mac dev test suite
+        run: bats tests/dev/
+
+      - name: Snapshot drift check
+        if: failure()
+        run: |
+          echo "::warning ::If snapshots drifted intentionally, regenerate locally:"
+          echo "::warning ::  UPDATE_SNAPSHOTS=1 bats tests/dev/snapshot.bats"
