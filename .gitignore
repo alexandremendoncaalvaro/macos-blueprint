@@ -2,3 +2,5 @@
 *.bak
 .claude/
 scripts/tui/node_modules/
+# Machine-local config (not versioned — use ~/.dotfiles.local)
+.dotfiles.local
