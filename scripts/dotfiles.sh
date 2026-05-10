@@ -21,8 +21,20 @@ BREWFILE="$DOTFILES/Brewfile"
 LOCKSCRIPT="$DOTFILES/scripts/brew-lock.py"
 
 # Machine-local config (per-machine settings, not versioned)
+# Source defensively — a syntactically broken ~/.dotfiles.local must not
+# abort `mac` before any subcommand runs. `set -e` fires DURING source
+# execution, so trailing `|| true` is not enough; toggle -e around the
+# source call to keep the rest of the script alive.
 DOTFILES_EXTERNAL_SSD=""
-[[ -f "$HOME/.dotfiles.local" ]] && source "$HOME/.dotfiles.local"
+if [[ -f "$HOME/.dotfiles.local" ]]; then
+  set +e
+  source "$HOME/.dotfiles.local" 2>/dev/null
+  src_status=$?
+  set -e
+  if (( src_status != 0 )); then
+    printf "  \033[1;33m!\033[0m  ~/.dotfiles.local failed to source (exit %d) — ignoring its values for this run\n" "$src_status" >&2
+  fi
+fi
 
 RED='\033[1;31m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'
 BLUE='\033[1;34m'; BOLD='\033[1m'; RESET='\033[0m'

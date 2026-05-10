@@ -19,7 +19,20 @@ CHECK_ONLY=false
 # ~/.dotfiles.local is not versioned — stores per-machine settings.
 LOCAL_CONFIG="$HOME/.dotfiles.local"
 DOTFILES_EXTERNAL_SSD=""
-[[ -f "$LOCAL_CONFIG" ]] && source "$LOCAL_CONFIG"
+# Source defensively: a malformed line in ~/.dotfiles.local (e.g. an
+# unquoted path containing a space) must not abort bootstrap before we
+# have a chance to fix it. `set -e` fires *during* source execution, so
+# trailing `|| true` cannot rescue us — we have to disable -e around the
+# source call and report the failure ourselves.
+if [[ -f "$LOCAL_CONFIG" ]]; then
+  set +e
+  source "$LOCAL_CONFIG" 2>/dev/null
+  src_status=$?
+  set -e
+  if (( src_status != 0 )); then
+    printf "  \033[1;33m!\033[0m  ~/.dotfiles.local failed to source (exit %d) — ignoring its values for this run\n" "$src_status" >&2
+  fi
+fi
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[1;31m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'
