@@ -893,15 +893,17 @@ step_external_ssd() {
         volume="$user_input"
         DOTFILES_EXTERNAL_SSD="$volume"
         # Persist to local config
+        # Always double-quote on write — paths under /Volumes can contain spaces
+        # (e.g. "/Volumes/Macintosh HD"), and an unquoted assignment would split
+        # the value at the first space and break sourcing of ~/.dotfiles.local.
         if [[ -f "$LOCAL_CONFIG" ]]; then
-          # Update or append
           if grep -q "^DOTFILES_EXTERNAL_SSD=" "$LOCAL_CONFIG" 2>/dev/null; then
-            sed -i '' "s|^DOTFILES_EXTERNAL_SSD=.*|DOTFILES_EXTERNAL_SSD=$volume|" "$LOCAL_CONFIG"
+            sed -i '' "s|^DOTFILES_EXTERNAL_SSD=.*|DOTFILES_EXTERNAL_SSD=\"$volume\"|" "$LOCAL_CONFIG"
           else
-            echo "DOTFILES_EXTERNAL_SSD=$volume" >> "$LOCAL_CONFIG"
+            printf 'DOTFILES_EXTERNAL_SSD="%s"\n' "$volume" >> "$LOCAL_CONFIG"
           fi
         else
-          printf "# Machine-local dotfiles config — do not commit this file\nDOTFILES_EXTERNAL_SSD=%s\n" "$volume" > "$LOCAL_CONFIG"
+          printf '# Machine-local dotfiles config — do not commit this file\nDOTFILES_EXTERNAL_SSD="%s"\n' "$volume" > "$LOCAL_CONFIG"
         fi
         record_applied "External SSD configured: $volume (saved to ~/.dotfiles.local)"
       else
