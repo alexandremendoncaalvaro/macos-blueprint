@@ -19,6 +19,7 @@ eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || true)"
 output=$("$DOTFILES/bootstrap.sh" --check 2>&1) || true
 
 # Count warnings and errors (strip ANSI codes).
+# shellcheck disable=SC2001 # ANSI escape stripping needs a regex.
 clean=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g')
 warnings=$(echo "$clean" | grep -c '  !  ' || true)
 errors=$(echo "$clean" | grep -c '  ✗  ' || true)
