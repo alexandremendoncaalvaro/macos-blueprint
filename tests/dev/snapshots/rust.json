@@ -46,7 +46,7 @@
       "version": "lts"
     }
   },
-  "image": "mcr.microsoft.com/devcontainers/rust:1-1-trixie",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.gitconfig.local,target=/home/vscode/.gitconfig.local,type=bind,readonly",
