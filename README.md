@@ -123,12 +123,12 @@ The merge uses `jq *` for objects and explicit dedup for the array fields (`moun
 | Stack | Image | Flavors |
 |-------|-------|---------|
 | `python` | `mcr.microsoft.com/devcontainers/python:3-3.13-trixie` (uv pre-installed) | `vanilla`, `fastapi`, `notebooks`, `opencv`, `pytorch`, `tensorflow` |
-| `node` | `javascript-node:1-22-trixie` | `vite-ts`, `vite-js`, `astro`, `react` |
+| `node` | `javascript-node:1-22-bookworm` | `vite-ts`, `vite-js`, `astro`, `react` |
 | `cpp` | `cpp:1-debian-12` (cmake + ninja + vcpkg pre-baked) | — (CMake 3.28 + C++20 + Catch2 scaffold from `cpp.post.sh`) |
-| `go` | `go:1-1.23-trixie` | — |
-| `rust` | `rust:1-1-trixie` | — |
-| `csharp` | `dotnet:1-9.0-trixie` | — |
-| `java` | `java:1-21-trixie` (Maven + Gradle) | — |
+| `go` | `go:1-1.23-bookworm` | — |
+| `rust` | `rust:1-1-bookworm` | — |
+| `csharp` | `dotnet:1-9.0-bookworm` | — |
+| `java` | `java:1-21-bookworm` (Maven + Gradle) | — |
 
 ### Examples
 
@@ -165,7 +165,7 @@ Each generated container mounts three host paths. Without these, the container f
 Bats covers the dev subsystem:
 
 ```bash
-mac dev test              # runs tests/dev/ (66 tests, ~5s)
+mac dev test              # runs tests/dev/ (68 tests, ~5s)
 UPDATE_SNAPSHOTS=1 mac dev test tests/dev/snapshot.bats   # accept new shape
 ```
 
@@ -370,7 +370,7 @@ dotfiles/
 │       ├── stacks/              # python|node|go|rust|cpp|csharp|java
 │       └── flavors/             # python-fastapi, node-vite-ts, ...
 ├── tests/
-│   └── dev/                     # bats test suite (66 tests + JSON snapshots)
+│   └── dev/                     # bats test suite (68 tests + JSON snapshots)
 └── .github/
     └── workflows/
         └── dev-tests.yml        # CI: shellcheck (ubuntu) + bats (macos)
