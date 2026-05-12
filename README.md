@@ -55,7 +55,7 @@ mac
 
 The TUI uses `@clack/prompts` (Node.js) and shows a quick status dashboard on launch, then a menu for all operations. Sub-menus group related actions (e.g. Packages > Add / Remove / List).
 
-Built with the existing stack — Node LTS is already managed by mise, so the only extra dependencies are `@clack/prompts` and `picocolors` (4 npm packages total).
+Built with the existing stack — Node 22 is already managed by mise, so the only extra dependencies are `@clack/prompts` and `picocolors` (4 npm packages total).
 
 ### Direct commands
 
@@ -391,7 +391,7 @@ Managed by [mise](https://mise.jdx.dev/). Declared in `.config/mise/config.toml`
 
 | Tool | Version |
 |------|---------|
-| Node | LTS |
+| Node | 22 |
 | Python | 3.13 |
 | Go | latest |
 | Rust | latest |
