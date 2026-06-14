@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-13T14:20:28Z",
+  "generated": "2026-06-14T18:49:33Z",
   "formulae": {
     "bat": "0.26.1",
     "bats-core": "1.13.0",
@@ -71,6 +71,7 @@
     "orbstack": "2.2.1,20628",
     "rive": "0.8.5037",
     "tailscale-app": "1.94.2",
-    "visual-studio-code": "1.124.2"
+    "visual-studio-code": "1.124.2",
+    "vivaldi": "8.0.4033.46"
   }
 }
